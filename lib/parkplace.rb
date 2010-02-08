@@ -93,7 +93,7 @@ module ParkPlace
                 YAML.load_file( conf ).each { |k,v| options.__send__("#{k}=", v) if options.__send__(k).nil? }
             end
             options.storage_dir = File.expand_path(options.storage_dir || 'storage', options.parkplace_dir)
-            options.database ||= {:adapter => 'sqlite3', :database => File.join(options.parkplace_dir, 'park.db')}
+            options.database ||= {:adapter => 'sqlite3', :database => File.join(options.parkplace_dir, (options.slave == true ? 'park-slave.db' : 'park.db'))}
             if options.database[:adapter] == 'sqlite3'
                 begin
                     require 'sqlite3_api'
@@ -112,8 +112,14 @@ module ParkPlace
               GemPlugin::Manager.instance.load "mongrel" => GemPlugin::INCLUDE
             end
 
-            config = Mongrel::Configurator.new :host => host do
+            config = Mongrel::Configurator.new( :host => host, :pid_file => "log/parkplace.#{port}.pid") do
+                if options.daemon
+                  write_pid_file
+                else
+                  puts "Use CTRL+C to stop"
+                end
                 daemonize(:cwd => Dir.pwd, :log_file => 'parkplace-server.log') unless options.daemon == false
+
                 listener :port => port do
                     uri "/", :handler => Mongrel::Camping::CampingHandler.new(ParkPlace)
                     uri "/backup", :handler => BackupHandler.new
