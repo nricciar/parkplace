@@ -11,6 +11,17 @@ ActiveRecord::Base.send :include, ActiveRecord::Acts::NestedSet
 
 Camping.goes :ParkPlace
 
+# Hack for ParkPlace behind a proxy
+module ParkPlace::Base
+    def URL c='/',*a
+      c = R(c, *a) if c.respond_to? :urls
+      c = self/c
+      hhost = @env.HTTP_X_FORWARDED_HOST.nil? ? @env.HTTP_HOST : @env.HTTP_X_FORWARDED_HOST.to_s
+      c = "//"+hhost+c if c[/^\//]
+      URI(c)
+    end
+end
+
 require 'parkplace/errors'
 require 'parkplace/helpers'
 require 'parkplace/models'
@@ -90,7 +101,7 @@ module ParkPlace
             end
             ParkPlace::STORAGE_PATH.replace options.storage_dir
         end
-        def serve(host, port)
+        def serve(host, port, options)
             require 'mongrel'
             require 'mongrel/camping'
             if $PARKPLACE_PROGRESS
@@ -99,6 +110,7 @@ module ParkPlace
             end
 
             config = Mongrel::Configurator.new :host => host do
+                daemonize(:cwd => Dir.pwd, :log_file => 'parkplace-server.log') unless options.daemon == false
                 listener :port => port do
                     uri "/", :handler => Mongrel::Camping::CampingHandler.new(ParkPlace)
                     if $PARKPLACE_PROGRESS

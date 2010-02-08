@@ -4,8 +4,8 @@ require 'optparse'
 $PARKPLACE_ACCESSORIES = true
 require 'rubygems'
 gem 'mongrel'
-gem 'activesupport', '~> 2.2.0'
-gem 'activerecord',  '~> 2.2.0'
+gem 'activesupport', '~> 2.3.0'
+gem 'activerecord',  '~> 2.3.0'
 require 'parkplace'
 
 DEFAULT_PASSWORD = 'pass@word1'
@@ -16,6 +16,9 @@ DEFAULT_SECRET = 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV'
 options = ParkPlace.options
 options.host = "127.0.0.1"
 options.port = 3002
+options.daemon = false
+options.slave = false
+options.master_host = ''
 
 opts = OptionParser.new do |opts|
     opts.banner = "Usage: parkplace [options] [host] [port]"
@@ -29,11 +32,16 @@ opts = OptionParser.new do |opts|
         options.parkplace_dir = d
     end
 
-    opts.on("-D", "--[no-]daemon",  "Daemon mode") do |d|
-        options.daemon = d
+    opts.on("-D", "--daemon",  "Daemon mode (run in background)") do |d|
+        options.daemon = true
     end
 
-    opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
+    opts.on("-s", "--slave MASTER_HOSTNAME", "Run as slave") do |s|
+        options.slave = true
+        options.master_host = s unless s.nil?
+    end
+
+    opts.on("-v", "--verbose", "Run verbosely") do |v|
         options.verbose = v
     end
 
@@ -86,4 +94,4 @@ if num_users == 1 and admin and admin.password == hmac_sha1( DEFAULT_PASSWORD, a
     puts "** You should change the default password for the admin at soonest chance!"
 end
 
-ParkPlace.serve(options.host, options.port)
+ParkPlace.serve(options.host, options.port, options)
