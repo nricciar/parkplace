@@ -38,7 +38,7 @@ opts = OptionParser.new do |opts|
 
     opts.on("-s", "--slave MASTER_HOSTNAME", "Run as slave") do |s|
         options.slave = true
-        options.master_host = s unless s.nil?
+        options.master_host = s.to_s unless s.nil?
     end
 
     opts.on("-v", "--verbose", "Run verbosely") do |v|

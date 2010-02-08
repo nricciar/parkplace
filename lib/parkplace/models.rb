@@ -29,6 +29,19 @@ module ParkPlace::Models
         has_one :torrent
         validates_length_of :name, :within => 3..255
 
+        def self.update_last_updated
+          tmp = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits ORDER BY updated_at DESC LIMIT 0,1}]
+          @@last_time_updated = tmp.empty? ? 0 : tmp.first.updated_at.to_i
+        end
+
+        def self.last_time_updated
+          @@last_time_updated ||= self.update_last_updated
+        end
+
+        def after_save
+          @@last_time_updated = self.updated_at.to_i
+        end
+
         def fullpath; File.join(STORAGE_PATH, name) end
         def grant hsh
             if hsh[:access]

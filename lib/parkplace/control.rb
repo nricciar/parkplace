@@ -156,6 +156,17 @@ module ParkPlace::Controllers
         end
     end
 
+    class CSlaves < R '/control/slaves'
+      login_required
+
+      def get
+        only_superusers
+        @known_hosts = BackupHandler.known_hosts
+        @last_updated = Models::Bit.last_time_updated
+        render :control, "Slave List", :known_hosts
+      end
+    end
+
     class CUsers < R '/control/users'
         login_required
         def get
@@ -259,6 +270,7 @@ module ParkPlace::Views
                         ul do
                             li { a 'buckets', control_tab(CBuckets) }
                             li { a 'users',   control_tab(CUsers)   } if @user.superuser?
+                            li { a 'slaves',   control_tab(CSlaves)   } if @user.superuser?
                             li { a 'profile', control_tab(CProfile) }
                             li { a 'logout',  control_tab(CLogout)  }
                         end
@@ -397,6 +409,33 @@ module ParkPlace::Views
                 end
             end
             input.newfile! :type => 'submit', :value => "Create"
+        end
+    end
+
+    def control_known_hosts
+        table do
+            thead do
+                th "Host"
+                th "Last Sync"
+                th "Last Version"
+            end
+            tbody do
+              @known_hosts.each_pair do |key,value|
+                tr do
+                  th do
+                    key
+                  end
+                  th do
+                    value[:last_check_in]
+                  end
+                  th do
+                    div :style => (@last_updated.to_i == value[:last_known_version].to_i ? "color:#006600" : "color:#660000") do
+                      value[:last_known_version]
+                    end
+                  end
+                end
+              end
+            end
         end
     end
 

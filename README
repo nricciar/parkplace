@@ -8,9 +8,9 @@
 
   First, a checklist:
 
-    1. Do you have Camping and Mongrel installed?
+    1. Do you have Camping, rfuzz and Mongrel installed?
 
-         gem install camping mongrel --include-dependencies
+         gem install rfuzz camping mongrel --include-dependencies
 
     2. I would also recommend the `sendfile' gem if you're on non-Windows.
 

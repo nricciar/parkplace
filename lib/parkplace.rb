@@ -22,6 +22,8 @@ module ParkPlace::Base
     end
 end
 
+require 'parkplace/sync_manager'
+require 'parkplace/backup_manager'
 require 'parkplace/errors'
 require 'parkplace/helpers'
 require 'parkplace/models'
@@ -113,6 +115,8 @@ module ParkPlace
                 daemonize(:cwd => Dir.pwd, :log_file => 'parkplace-server.log') unless options.daemon == false
                 listener :port => port do
                     uri "/", :handler => Mongrel::Camping::CampingHandler.new(ParkPlace)
+                    uri "/backup", :handler => BackupHandler.new
+
                     if $PARKPLACE_PROGRESS
                       uri "/control/buckets", :handler => plugin('/handlers/upload')
                     end
@@ -120,6 +124,20 @@ module ParkPlace
                     trap("INT") { stop }
                     run
                 end
+            end
+
+            if options.slave == true
+              thread = Thread.new do
+                trap("INT") { exit }
+                sync_manager = SyncManager.new({ :server => options.master_host })
+
+                while true do
+                  sync_manager.run
+                  sleep 5
+                  puts "[#{Time.now}] polling..."
+                end
+              end
+              thread.join
             end
 
             puts "** ParkPlace example is running at http://#{host}:#{port}/"
