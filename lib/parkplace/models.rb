@@ -1,7 +1,7 @@
 module ParkPlace::Models
 
     class FileInfo
-        attr_accessor :path, :mime_type, :disposition, :size, :md5
+        attr_accessor :path, :mime_type, :disposition, :size, :md5, :etag
     end
 
     class User < Base
@@ -93,7 +93,9 @@ module ParkPlace::Models
     class Slot < Bit
         def fullpath; File.join(STORAGE_PATH, obj.path) end
         def etag
-            if self.obj.respond_to? :md5
+            if self.obj.respond_to? :etag
+                self.obj.etag
+            elsif self.obj.respond_to? :md5
                 self.obj.md5
             else
                %{"#{MD5.md5(self.obj)}"}

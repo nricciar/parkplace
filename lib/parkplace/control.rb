@@ -110,6 +110,7 @@ module ParkPlace::Controllers
             fileinfo.mime_type = @input.upfile['type'] || "binary/octet-stream"
             fileinfo.size = readlen
             fileinfo.md5 = md5.hexdigest
+            fileinfo.etag = '"' + md5.hexdigest + '"'
 
             fileinfo.path = File.join(bucket_name, File.basename(tmpf.path))
             fileinfo.path.succ! while File.exists?(File.join(STORAGE_PATH, fileinfo.path))
