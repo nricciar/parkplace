@@ -371,7 +371,8 @@ module ParkPlace::Views
                             div.details :id => "details-#{file.id}" do
                                 p "Last modified on #{file.updated_at}"
                                 p do
-                                    info = [a("Torrent", :href => R(RSlot, @bucket.name, file.name) + "?torrent")]
+                                    info = [a("Get", :href => R(CFile, @bucket.name, file.name))]
+                                    info += [a("Torrent", :href => R(RSlot, @bucket.name, file.name) + "?torrent")]
                                     if file.torrent
                                         info += ["#{file.torrent.seeders} seeders", 
                                             "#{file.torrent.leechers} leechers",
