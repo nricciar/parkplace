@@ -172,7 +172,7 @@ module ParkPlace::Controllers
         only_superusers
         @known_hosts = BackupHandler.known_hosts
         @last_updated = Models::Bit.last_time_updated
-        render :control, "Slave List", :known_hosts
+        render :control, "Network Status", :known_hosts
       end
     end
 
@@ -436,7 +436,9 @@ module ParkPlace::Views
                     key
                   end
                   th do
-                    value[:last_check_in]
+                    div :style => (10.minutes.ago > value[:last_check_in] ? "color:#660000" : "color:#006600") do
+                      value[:last_check_in]
+                    end
                   end
                   th do
                     div :style => (@last_updated.to_i == value[:last_known_version].to_i ? "color:#006600" : "color:#660000") do

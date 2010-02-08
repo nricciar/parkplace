@@ -6,10 +6,12 @@ module ParkPlace
 
   class SyncManager
 
-    attr_accessor :server, :secret_key, :username
+    attr_accessor :server, :port, :secret_key, :username
 
     def initialize(options = {})
-      self.server = options[:server]
+      host_check = options[:server].split(":")
+      self.server = host_check.first
+      self.port = host_check.size == 1 ? 80 : host_check[1].to_i
       self.secret_key = options[:secret_key].nil? ? 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV' : options[:secret_key]
       self.username = options[:username].nil? ? 'admin' : options[:username]
     end
@@ -21,7 +23,7 @@ module ParkPlace
     def http_client
       @bits = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits ORDER BY updated_at DESC LIMIT 0,1}]
       opt = @bits.empty? ? {} : { 'If-Modified-Since' => @bits[0].updated_at.to_i.to_s }
-      RFuzz::HttpClient.new(self.server,80, :head => opt.merge({ 'Authorization' => auth_header }))
+      RFuzz::HttpClient.new(self.server,self.port, :head => opt.merge({ 'Authorization' => auth_header }))
     end
 
     def run

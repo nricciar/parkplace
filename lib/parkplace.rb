@@ -118,7 +118,7 @@ module ParkPlace
                 else
                   puts "Use CTRL+C to stop"
                 end
-                daemonize(:cwd => Dir.pwd, :log_file => 'parkplace-server.log') unless options.daemon == false
+                daemonize(:cwd => Dir.pwd, :log_file => "log/" + (options.slave == true ? "slave" : "server") + ".log") unless options.daemon == false
 
                 listener :port => port do
                     uri "/", :handler => Mongrel::Camping::CampingHandler.new(ParkPlace)
