@@ -6,6 +6,9 @@ require 'rubygems'
 gem 'mongrel'
 gem 'activesupport', '~> 2.3.0'
 gem 'activerecord',  '~> 2.3.0'
+gem 'rfuzz'
+gem 'exifr'
+
 require 'parkplace'
 
 DEFAULT_PASSWORD = 'pass@word1'

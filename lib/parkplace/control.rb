@@ -117,8 +117,17 @@ module ParkPlace::Controllers
             FileUtils.mkdir_p(File.dirname(file_path))
             FileUtils.mv(tmpf.path, file_path)
 
+            mdata = {}
+            if fileinfo.mime_type =~ /jpg|jpeg/
+              photo_data = EXIFR::JPEG.new(file_path).to_hash
+              photo_data.each_pair do |key,value|
+                tmp = key.to_s.gsub(/[^a-z0-9]+/i, '-').downcase.gsub(/-$/,'')
+                mdata[tmp] = value.to_s
+              end
+            end
+
             @input.fname = @input.upfile.filename if @input.fname.blank?
-            slot = Slot.create(:name => @input.fname, :owner_id => @user.id, :meta => nil, :obj => fileinfo)
+            slot = Slot.create(:name => @input.fname, :owner_id => @user.id, :meta => mdata, :obj => fileinfo)
             slot.grant(:access => @input.facl.to_i)
             bucket.add_child(slot)
             redirect CFiles, bucket_name

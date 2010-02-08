@@ -5,6 +5,7 @@ require 'digest/sha1'
 require 'base64'
 require 'time'
 require 'md5'
+require 'exifr'
 
 require 'active_record/acts/nested_set'
 ActiveRecord::Base.send :include, ActiveRecord::Acts::NestedSet

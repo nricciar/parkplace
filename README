@@ -1,35 +1,17 @@
+Required:
+  gem install rfuzz camping mongrel exifr --include-dependancies
+  gem install sendfile
 
+  rfuzz is used by parkplace to get updates from the master server
+  exifr is used to extract metadata for jpeg images
 
-  Park Place                                               an Amazon-S3 clone
-  ---------------------------------------------------------------------------
+Run:
+  bin/parkplace
 
-  Okay, so, you've checked out from Subversion and you want to get this suckr
-  up and everything.
+More Options:
 
-  First, a checklist:
+  bin/parkplace --help
 
-    1. Do you have Camping, rfuzz and Mongrel installed?
+Replicate Your Parkplace Server:
 
-         gem install rfuzz camping mongrel --include-dependencies
-
-    2. I would also recommend the `sendfile' gem if you're on non-Windows.
-
-         gem install sendfile
-
-    3. Do you have SQLite3 installed?  (If you don't want to mess with the
-       database driver.)
-
-         Follow these instructions EXACTLY AS WRITTEN:
-         http://code.whytheluckystiff.net/camping/wiki/BeAlertWhenOnSqlite3
-
-  Okay, time to turn it on:
-
-    bin/parkplace
-
-  Once you're sold, you can go ahead and install it for reals:
-
-    sudo ruby setup.rb
-    parkplace
-
-  ---------------------------------------------------------------------------
-         for more, visit: http://code.whytheluckystiff.net/parkplace
+  bin/parkplace -s master.server

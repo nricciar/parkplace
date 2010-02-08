@@ -199,6 +199,16 @@ module ParkPlace::Controllers
               FileUtils.mv(temp_path, file_path)
             end
 
+            mdata = {}
+            if fileinfo.mime_type =~ /jpg|jpeg/
+              photo_data = EXIFR::JPEG.new(file_path).to_hash
+              photo_data.each_pair do |key,value|
+                tmp = key.to_s.gsub(/[^a-z0-9]+/i, '-').downcase.gsub(/-$/,'')
+                mdata[tmp] = value.to_s
+              end
+              @meta = mdata unless mdata.empty?
+            end
+
             slot = nil
             meta = @meta.empty? ? nil : {}.merge(@meta)
             owner_id = @user ? @user.id : bucket.owner_id
