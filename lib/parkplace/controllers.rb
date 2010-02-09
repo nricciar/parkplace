@@ -27,6 +27,45 @@ module ParkPlace
         end
         def get(bucket_name, oid)
             head(bucket_name, oid)
+            if @input.has_key? 'acl'
+              data = xml do |x|
+                x.AccessControlPolicy :xmlns => "http://s3.amazonaws.com/doc/2006-03-01/" do
+                  x.Owner do
+                    x.ID @slot.owner.key
+                    x.DisplayName @slot.owner.login
+                  end
+                  # owner
+                  x.AccessControlList do
+                    x.Grant do
+                      x.Grantee "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance", "xsi:type" => "CanonicalUser" do
+                        x.ID @slot.owner.key
+                        x.DisplayName @slot.owner.login
+                      end
+                      x.Permission 'FULL_CONTROL'
+                    end
+                    if [416,432].include?(@slot.access) && !@slot.authenticated_permission.nil?
+                      # authenticated users
+                      x.Grant do
+                        x.Grantee "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance", "xsi:type" => "Group" do
+                          x.URI "http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
+                        end
+                        x.Permission @slot.authenticated_permission
+                      end
+                    end
+                    if [420,438].include?(@slot.access) && !@slot.anonymous_permission.nil?
+                      # anonymous
+                      x.Grant do
+                        x.Grantee "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance", "xsi:type" => "Group" do
+                          x.URI "http://acs.amazonaws.com/groups/global/AllUsers"
+                        end
+                        x.Permission @slot.anonymous_permission
+                      end
+                    end
+                  end
+                end
+              end
+              return data
+            end
             if @input.has_key? 'torrent'
                 torrent @slot
             elsif @slot.obj.kind_of?(ParkPlace::Models::FileInfo) && @env.HTTP_RANGE =~ /^bytes=(\d+)?-(\d+)?$/ # yay, parse basic ranges

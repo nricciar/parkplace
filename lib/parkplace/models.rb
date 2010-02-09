@@ -36,6 +36,22 @@ module ParkPlace::Models
         has_one :torrent
         validates_length_of :name, :within => 3..255
 
+        def anonymous_permission
+          case self.access
+          when 420 then "READ"
+          when 438 then "WRITE"
+          else nil
+          end
+        end
+
+        def authenticated_permission
+          case self.access
+          when 416 then "READ"
+          when 432 then "WRITE"
+          else nil
+          end
+        end
+
         def self.update_last_updated
           tmp = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits ORDER BY updated_at DESC LIMIT 0,1}]
           @@last_time_updated = tmp.empty? ? 0 : tmp.first.updated_at.to_i
