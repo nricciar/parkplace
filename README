@@ -1,9 +1,11 @@
 Required:
-  gem install rfuzz camping mongrel exifr --include-dependancies
+  gem install camping mongrel --include-dependancies
   gem install sendfile
 
-  rfuzz is used by parkplace to get updates from the master server
-  exifr is used to extract metadata for jpeg images
+Optional:
+  rfuzz - replacement for net/http
+  curb  - replacement for net/http
+  exifr - used to extract metadata for jpeg images
 
 Run:
   bin/parkplace
@@ -14,4 +16,4 @@ More Options:
 
 Replicate Your Parkplace Server:
 
-  bin/parkplace -s master.server
+  bin/parkplace -r master.server

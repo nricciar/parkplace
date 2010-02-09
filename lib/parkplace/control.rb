@@ -119,7 +119,7 @@ module ParkPlace::Controllers
             FileUtils.mv(tmpf.path, file_path)
 
             mdata = {}
-            if fileinfo.mime_type =~ /jpg|jpeg/
+            if defined?(EXIFR) && fileinfo.mime_type =~ /jpg|jpeg/
               photo_data = EXIFR::JPEG.new(file_path).to_hash
               photo_data.each_pair do |key,value|
                 tmp = key.to_s.gsub(/[^a-z0-9]+/i, '-').downcase.gsub(/-$/,'')

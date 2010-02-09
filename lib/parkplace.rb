@@ -5,7 +5,6 @@ require 'digest/sha1'
 require 'base64'
 require 'time'
 require 'md5'
-require 'exifr'
 
 require 'active_record/acts/nested_set'
 ActiveRecord::Base.send :include, ActiveRecord::Acts::NestedSet
@@ -23,14 +22,20 @@ module ParkPlace::Base
     end
 end
 
-require 'parkplace/sync_manager'
-require 'parkplace/backup_manager'
 require 'parkplace/errors'
 require 'parkplace/helpers'
 require 'parkplace/models'
 require 'parkplace/controllers'
 if $PARKPLACE_ACCESSORIES
+  require 'parkplace/sync_manager'
+  require 'parkplace/backup_manager'
   require 'parkplace/control'
+  begin
+    require 'exifr'
+    puts "-- EXIFR found, JPEG metadata enabled."
+  rescue LoadError
+    puts "-- EXIFR not found, JPEG metadata disabled."
+  end
 end
 begin
     require 'parkplace/torrent'
@@ -39,6 +44,7 @@ begin
 rescue LoadError
     puts "-- No RubyTorrent found, torrent support disbled."
 end
+
 require 'parkplace/s3'
 
 module ParkPlace
@@ -113,17 +119,14 @@ module ParkPlace
             end
 
             config = Mongrel::Configurator.new( :host => host, :pid_file => "log/parkplace.#{port}.pid") do
-                if options.daemon
-                  write_pid_file
-                else
-                  puts "Use CTRL+C to stop"
-                end
+                write_pid_file if options.daemon
                 daemonize(:cwd => Dir.pwd, :log_file => "log/" + (options.slave == true ? "slave" : "server") + ".log") unless options.daemon == false
 
                 listener :port => port do
                     uri "/", :handler => Mongrel::Camping::CampingHandler.new(ParkPlace)
-                    uri "/backup", :handler => BackupHandler.new
-
+                    if $PARKPLACE_ACCESSORIES
+                      uri "/backup", :handler => BackupHandler.new
+                    end
                     if $PARKPLACE_PROGRESS
                       uri "/control/buckets", :handler => plugin('/handlers/upload')
                     end
@@ -133,7 +136,7 @@ module ParkPlace
                 end
             end
 
-            if options.slave == true
+            if $PARKPLACE_ACCESSORIES && options.slave == true
               thread = Thread.new do
                 trap("INT") { exit }
                 sync_manager = SyncManager.new({ :server => options.master_host })
@@ -146,9 +149,11 @@ module ParkPlace
               end
               thread.join
             end
-
-            puts "** ParkPlace example is running at http://#{host}:#{port}/"
-            puts "** Visit http://#{host}:#{port}/control/ for the control center."
+            if $PARKPLACE_ACCESSORIES
+              puts "** ParkPlace example is running at http://#{host}:#{port}/"
+              puts "** Visit http://#{host}:#{port}/control/ for the control center."
+            end
+            puts "** Use CTRL+C to stop" unless options.daemon
             config.join
         end
     end

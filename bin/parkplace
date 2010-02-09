@@ -6,8 +6,6 @@ require 'rubygems'
 gem 'mongrel'
 gem 'activesupport', '~> 2.3.0'
 gem 'activerecord',  '~> 2.3.0'
-gem 'rfuzz'
-gem 'exifr'
 
 require 'parkplace'
 
@@ -39,13 +37,17 @@ opts = OptionParser.new do |opts|
         options.daemon = true
     end
 
-    opts.on("-s", "--slave MASTER_HOSTNAME", "Run as slave") do |s|
+    opts.on("-r", "--replicate MASTER_HOSTNAME", "Run as slave / mirror masters contents") do |s|
         options.slave = true
         options.master_host = s.to_s unless s.nil?
     end
 
     opts.on("-v", "--verbose", "Run verbosely") do |v|
         options.verbose = v
+    end
+
+    opts.on("-s", "--strict", "S3 API ONLY (No added ParkPlace features)") do |v|
+        $PARKPLACE_ACCESSORIES = false
     end
 
     opts.on("-u", "--debug", "Debug Mode") do |v|

@@ -1,6 +1,14 @@
 require 'parkplace/thread_pool'
-require 'rfuzz/session'
-require 'open-uri'
+begin
+  require 'curb'
+rescue LoadError
+  begin
+    require 'rfuzz/session'
+  rescue LoadError
+    require 'net/http'
+    puts "-- rfuzz and curb not found falling back on net/http (expect higher CPU usage, and more crashes)"
+  end
+end
 
 module ParkPlace
 
@@ -20,18 +28,37 @@ module ParkPlace
       "#{self.username}:#{self.secret_key}"
     end
 
-    def http_client
-      @bits = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits ORDER BY updated_at DESC LIMIT 0,1}]
-      opt = @bits.empty? ? {} : { 'If-Modified-Since' => @bits[0].updated_at.to_i.to_s }
-      RFuzz::HttpClient.new(self.server,self.port, :head => opt.merge({ 'Authorization' => auth_header }))
+    def get_file(path,ifmodified=nil,save_as=nil)
+      default_headers = { 'Authorization' => auth_header }
+      if defined?(Curl)
+        if save_as.nil?
+          client = Curl::Easy.new("http://#{self.server}:#{self.port}#{path}")
+        else
+          client = Curl::Easy.download("http://#{self.server}:#{self.port}#{path}",save_as)
+        end
+        client.headers = default_headers.merge(ifmodified.nil? ? {} : { 'If-Modified-Since' => ifmodified })
+        client.perform
+        yield client.body_str if save_as.nil?
+      elsif defined?(RFuzz)
+        client = RFuzz::HttpClient.new(self.server,self.port, :head => default_headers.merge(ifmodified.nil? ? {} : { 'If-Modified-Since' => ifmodified }))
+        response = client.get(path)
+        yield response.http_body if response.http_status.to_i == 200
+      else
+        client = Net::HTTP.new(self.server, self.port) 
+        client.read_timeout = 500
+
+        req = Net::HTTP::Get.new(path, default_headers.merge(ifmodified.nil? ? {} : { 'If-Modified-Since' => ifmodified }))
+
+        response = client.request(req)
+        yield response.body.to_s
+      end
     end
 
     def run
       pool = ::ThreadPool.new(10)
+      @bits = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits ORDER BY updated_at DESC LIMIT 0,1}]
 
-      master = self.http_client.get("/backup")
-      if master.http_status.to_i == 200
-        feed = master.http_body
+      get_file("/backup",(@bits.empty? ? nil : @bits[0].updated_at.to_i.to_s)) do |feed|
         new_data = YAML::load(feed)
         new_data.each do |r|
           exist_check = Models::Bit.find_by_sql [ %{ SELECT * FROM parkplace_bits WHERE id = ?}, r.attributes['id'].to_s ]
@@ -87,11 +114,11 @@ module ParkPlace
           # Files
           if tmp.type == "Slot"
             if File.exists?(file_path)
-              check = Base64.encode64(MD5.md5(File.read(file_path)).digest).strip
+              check = MD5.md5(File.read(file_path)).hexdigest
               if check != tmp.obj.md5
-                puts "[#{Time.now}] Checksum does not match for #{file_path} re-downloading"
+                puts "[#{Time.now}] Checksum does not match for #{file_path} re-downloading [#{tmp.obj.md5}/#{check}]"
                 pool.process {
-                  open("http://#{self.server}/backup/#{tmp.id}", { 'Authorization' => auth_header }) do |data|
+                  get_file("/backup/#{tmp.id}",nil,file_path) do |data|
                     open(file_path,"wb") { |f| f.write(data.read) }
                   end
                   puts "[#{Time.now}] Downloaded #{file_path}"
@@ -101,7 +128,7 @@ module ParkPlace
               end
             else
               pool.process {
-                open("http://#{self.server}/backup/#{tmp.id}", { 'Authorization' => auth_header }) do |data|
+                get_file("/backup/#{tmp.id}",nil,file_path) do |data|
                   open(file_path,"wb") { |f| f.write(data.read) }
                 end
                 puts "[#{Time.now}] Downloaded #{file_path}"
