@@ -79,7 +79,7 @@ class BackupHandler < Mongrel::HttpHandler
             out << [].to_yaml
           else
             head['Last-Modified'] = @bits.last.updated_at.to_i
-            @bits.sort! { |x,y| y.updated_at <=> x.updated_at }
+            @bits.sort! { |x,y| x.updated_at <=> y.updated_at }
             out << @bits.to_yaml
           end
       end
