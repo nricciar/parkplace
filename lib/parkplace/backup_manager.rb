@@ -20,7 +20,7 @@ class BackupHandler < Mongrel::HttpHandler
     else
       username,key = request.params["HTTP_AUTHORIZATION"].split(":")
       user = Models::User.find_by_sql [%{ SELECT * FROM parkplace_users WHERE login = ?}, username ]
-      if user.empty? || !user.first.superuser? || user.first.secret != key
+      if user.empty? || !user.first.superuser? || MD5.md5("#{user.first.secret}:#{request.params['REQUEST_URI']}:#{request.params['HTTP_IF_MODIFIED_SINCE']}").hexdigest != key
         response.start(401) do |head,out|
           out << "Access Denied"
         end

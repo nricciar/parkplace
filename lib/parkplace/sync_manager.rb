@@ -24,21 +24,25 @@ module ParkPlace
       self.username = options[:username].nil? ? 'admin' : options[:username]
     end
 
-    def auth_header
-      "#{self.username}:#{self.secret_key}"
+    def auth_header(path,modified=nil)
+      request_key = MD5.md5("#{self.secret_key}:#{path}:#{modified}").hexdigest
+      "#{self.username}:#{request_key}"
     end
 
     def get_file(path,ifmodified=nil,save_as=nil)
-      default_headers = { 'Authorization' => auth_header }
+      default_headers = { 'Authorization' => auth_header(path,ifmodified) }
       if defined?(Curl)
         if save_as.nil?
           client = Curl::Easy.new("http://#{self.server}:#{self.port}#{path}")
+          client.headers = default_headers.merge(ifmodified.nil? ? {} : { 'If-Modified-Since' => ifmodified })
+          client.perform
+          yield client.body_str
         else
-          client = Curl::Easy.download("http://#{self.server}:#{self.port}#{path}",save_as)
+          Curl::Easy.download("http://#{self.server}:#{self.port}#{path}",save_as) do |client|
+            client.verbose = false
+            client.headers = default_headers.merge(ifmodified.nil? ? {} : { 'If-Modified-Since' => ifmodified })
+          end
         end
-        client.headers = default_headers.merge(ifmodified.nil? ? {} : { 'If-Modified-Since' => ifmodified })
-        client.perform
-        yield client.body_str if save_as.nil?
       elsif defined?(RFuzz)
         client = RFuzz::HttpClient.new(self.server,self.port, :head => default_headers.merge(ifmodified.nil? ? {} : { 'If-Modified-Since' => ifmodified }))
         response = client.get(path)
@@ -119,7 +123,7 @@ module ParkPlace
                 puts "[#{Time.now}] Checksum does not match for #{file_path} re-downloading [#{tmp.obj.md5}/#{check}]"
                 pool.process {
                   get_file("/backup/#{tmp.id}",nil,file_path) do |data|
-                    open(file_path,"wb") { |f| f.write(data.read) }
+                    open(file_path,"wb") { |f| f.write(data.read) } unless data.nil?
                   end
                   puts "[#{Time.now}] Downloaded #{file_path}"
                 }
@@ -129,7 +133,7 @@ module ParkPlace
             else
               pool.process {
                 get_file("/backup/#{tmp.id}",nil,file_path) do |data|
-                  open(file_path,"wb") { |f| f.write(data.read) }
+                  open(file_path,"wb") { |f| f.write(data.read) } unless data.nil?
                 end
                 puts "[#{Time.now}] Downloaded #{file_path}"
               }
@@ -137,6 +141,10 @@ module ParkPlace
           end
         end
       end
+
+
+
+
     end
   end
 end
