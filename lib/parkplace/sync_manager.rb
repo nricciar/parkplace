@@ -154,7 +154,7 @@ module ParkPlace
               super
             end
           end
-          download_file_if_needed(tmp) if tmp.class == "ParkPlace::Models::Slot" && tmp.deleted == 0
+          download_file_if_needed(tmp) if tmp.kind_of?(ParkPlace::Models::Bit) && !tmp.obj.nil? && tmp.deleted == 0
         end
       end
       @pool.join
