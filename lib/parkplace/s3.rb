@@ -38,7 +38,7 @@ module ParkPlace::Controllers
             bucket = Bucket.find_root(bucket_name)
             only_owner_of bucket
 
-            if Slot.count(:conditions => ['parent_id = ?', bucket.id]) > 0
+            if Slot.count(:conditions => ['deleted = 0 AND parent_id = ?', bucket.id]) > 0
                 raise BucketNotEmpty
             end
             bucket.destroy

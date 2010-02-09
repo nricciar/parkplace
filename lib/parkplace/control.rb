@@ -5,7 +5,28 @@ class Class
         include Camping::Session, ParkPlace::UserSession, ParkPlace::Base
     end
 end
-
+class HashWithIndifferentAccess
+ def self.self_and_descendants_from_active_record
+   [self]
+ end
+ def self.human_attribute_name(attribute_key_name, options = {})
+   defaults = self_and_descendants_from_active_record.map do |klass|
+     "#{klass.name.underscore}.#{attribute_key_name}""#{klass.name.underscore}.#{attribute_key_name}"
+   end
+   defaults << options[:default] if options[:default]
+   defaults.flatten!
+   defaults << attribute_key_name.humanize
+   options[:count] ||= 1
+   I18n.translate(defaults.shift, options.merge(:default => defaults, :scope => [:activerecord, :attributes]))
+ end
+ def self.human_name(options = {})
+   defaults = self_and_descendants_from_active_record.map do |klass|
+     "#{klass.name.underscore}""#{klass.name.underscore}"
+   end
+   defaults << self.name.humanize
+   I18n.translate(defaults.shift, {:scope => [:activerecord, :models], :count => 1, :default => defaults}.merge(options))
+ end
+end
 module ParkPlace::UserSession
     def service(*a)
         if @state.user_id
@@ -68,7 +89,7 @@ module ParkPlace::Controllers
                SELECT b.*, COUNT(c.id) AS total_children
                FROM parkplace_bits b LEFT JOIN parkplace_bits c 
                         ON c.parent_id = b.id AND c.deleted = 0
-               WHERE b.parent_id IS NULL AND b.owner_id = ?
+               WHERE b.deleted = 0 AND b.parent_id IS NULL AND b.owner_id = ?
                GROUP BY b.id ORDER BY b.name}, @user.id]
             @bucket = Bucket.new(:owner_id => @user.id, :access => CANNED_ACLS['private'])
         end
@@ -146,7 +167,7 @@ module ParkPlace::Controllers
             bucket = Bucket.find_root(bucket_name)
             only_owner_of bucket
 
-            if Slot.count(:conditions => ['parent_id = ?', bucket.id]) > 0
+            if Slot.count(:conditions => ['deleted = 0 AND parent_id = ?', bucket.id]) > 0
                 error "Bucket #{bucket.name} cannot be deleted, since it is not empty."
             else
                 bucket.destroy
@@ -318,6 +339,7 @@ module ParkPlace::Views
     end
 
     def control_buckets
+        errors_for @state
         if @buckets.any?
             table do
                 thead do

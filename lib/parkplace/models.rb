@@ -11,12 +11,19 @@ module ParkPlace::Models
         validates_uniqueness_of :key
         validates_presence_of :password
         validates_confirmation_of :password
+        attr_accessor :skip_before_save
         def before_save
+          unless self.skip_before_save
             @password_clean = self.password
             self.password = hmac_sha1(self.password, self.secret)
+          end
         end
         def after_save
             self.password = @password_clean
+        end
+        def destroy
+            self.deleted = 1
+            self.save
         end
     end
 
