@@ -42,6 +42,15 @@ module ParkPlace::Models
           @@last_time_updated = self.updated_at.to_i
         end
 
+        def destroy
+          # need to keep the record around for slaves
+          if self.type == 'Slot' && File.exists?(self.fullpath)
+            File.unlink(self.fullpath)
+          end
+          self.update_attributes({:name => nil, :meta => nil, :obj => nil, :deleted => 1})
+          self.save(false)
+        end
+
         def fullpath; File.join(STORAGE_PATH, name) end
         def grant hsh
             if hsh[:access]
@@ -83,10 +92,10 @@ module ParkPlace::Models
     class Bucket < Bit
         validates_format_of :name, :with => /^[-\w]+$/
         def self.find_root(bucket_name)
-            find(:first, :conditions => ['parent_id IS NULL AND name = ?', bucket_name]) or raise NoSuchBucket
+            find(:first, :conditions => ['deleted = 0 AND parent_id IS NULL AND name = ?', bucket_name]) or raise NoSuchBucket
         end
         def find_slot(oid)
-            Slot.find(:first, :conditions => ['parent_id = ? AND name = ?', self.id, oid]) or raise NoSuchKey
+            Slot.find(:first, :conditions => ['deleted = 0 AND parent_id = ? AND name = ?', self.id, oid]) or raise NoSuchKey
         end
     end
 
@@ -127,6 +136,7 @@ module ParkPlace::Models
                 t.column :access,    :integer
                 t.column :meta,      :text
                 t.column :obj,       :text
+                t.column :deleted,   :integer, :default => 0
             end
             add_index :parkplace_bits, :name
             create_table :parkplace_users do |t|
@@ -137,6 +147,7 @@ module ParkPlace::Models
                 t.column :key,            :string,   :limit => 64
                 t.column :secret,         :string,   :limit => 64
                 t.column :created_at,     :datetime
+                t.column :updated_at,     :timestamp
                 t.column :activated_at,   :datetime
                 t.column :superuser,      :integer, :default => 0
                 t.column :deleted,        :integer, :default => 0

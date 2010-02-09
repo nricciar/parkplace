@@ -67,7 +67,7 @@ module ParkPlace::Controllers
             @buckets = Bucket.find_by_sql [%{
                SELECT b.*, COUNT(c.id) AS total_children
                FROM parkplace_bits b LEFT JOIN parkplace_bits c 
-                        ON c.parent_id = b.id
+                        ON c.parent_id = b.id AND c.deleted = 0
                WHERE b.parent_id IS NULL AND b.owner_id = ?
                GROUP BY b.id ORDER BY b.name}, @user.id]
             @bucket = Bucket.new(:owner_id => @user.id, :access => CANNED_ACLS['private'])
@@ -93,7 +93,7 @@ module ParkPlace::Controllers
             @bucket = Bucket.find_root(bucket_name)
             only_can_read @bucket
             @files = Slot.find :all, :include => :torrent, 
-              :conditions => ['parent_id = ?', @bucket.id], :order => 'name'
+              :conditions => ['deleted = 0 AND parent_id = ?', @bucket.id], :order => 'name'
             render :control, "/#{@bucket.name}", :files
         end
         def post(bucket_name)

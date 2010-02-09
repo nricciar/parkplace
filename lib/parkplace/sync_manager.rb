@@ -59,7 +59,7 @@ module ParkPlace
     end
 
     def run
-      pool = ::ThreadPool.new(10)
+      pool = ThreadPool.new(10)
       @bits = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits ORDER BY updated_at DESC LIMIT 0,1}]
 
       get_file("/backup",(@bits.empty? ? nil : @bits[0].updated_at.to_i.to_s)) do |feed|
@@ -75,7 +75,7 @@ module ParkPlace
           tmp.name = r.attributes['name']
             tmp.updated_at = r.attributes['updated_at']
             tmp.type = r.attributes['type']
-            if tmp.type == 'Slot'
+            if tmp.type == 'Slot' && r.attributes['deleted'].to_i == 0
               file_path = File.join(STORAGE_PATH, r.attributes['obj'].path)
               dir = File.dirname(file_path)
 
@@ -95,6 +95,13 @@ module ParkPlace
                 end
               end
             end
+            if r.attributes['deleted'].to_i == 1 && !tmp.obj.nil?
+              file_path = File.join(STORAGE_PATH, tmp.obj.path)
+              if File.exists?(file_path)
+                File.unlink(file_path)
+                puts "[#{Time.now}] Removed deleted file #{file_path}"
+              end
+            end
             tmp.obj = r.attributes['obj']
             tmp.lft = r.attributes['lft']
             tmp.meta = r.attributes['meta']
@@ -103,6 +110,7 @@ module ParkPlace
             tmp.parent_id = r.attributes['parent_id']
             tmp.rgt = r.attributes['rgt']
             tmp.created_at = r.attributes['created_at']
+            tmp.deleted = r.attributes['deleted']
             class << tmp
               def record_timestamps
                 false
@@ -116,14 +124,14 @@ module ParkPlace
             end
 
           # Files
-          if tmp.type == "Slot"
+          if tmp.type == "Slot" && tmp.deleted == 0
             if File.exists?(file_path)
               check = MD5.md5(File.read(file_path)).hexdigest
               if check != tmp.obj.md5
                 puts "[#{Time.now}] Checksum does not match for #{file_path} re-downloading [#{tmp.obj.md5}/#{check}]"
                 pool.process {
                   get_file("/backup/#{tmp.id}",nil,file_path) do |data|
-                    open(file_path,"wb") { |f| f.write(data.read) } unless data.nil?
+                    open(file_path,"wb") { |f| f.write(data) } unless data.nil?
                   end
                   puts "[#{Time.now}] Downloaded #{file_path}"
                 }
@@ -133,7 +141,7 @@ module ParkPlace
             else
               pool.process {
                 get_file("/backup/#{tmp.id}",nil,file_path) do |data|
-                  open(file_path,"wb") { |f| f.write(data.read) } unless data.nil?
+                  open(file_path,"wb") { |f| f.write(data) } unless data.nil?
                 end
                 puts "[#{Time.now}] Downloaded #{file_path}"
               }
@@ -141,7 +149,7 @@ module ParkPlace
           end
         end
       end
-
+      pool.join
 
 
 
