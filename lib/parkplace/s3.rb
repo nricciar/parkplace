@@ -223,7 +223,7 @@ module ParkPlace::Controllers
                 slot = Slot.create(:name => oid, :owner_id => owner_id, :meta => meta, :obj => fileinfo)
                 bucket.add_child(slot)
             end
-            slot.grant(requested_acl)
+            slot.grant(requested_acl(slot))
             r(200, '', 'ETag' => slot.etag, 'Content-Length' => 0)
         end
         def delete(bucket_name, oid)

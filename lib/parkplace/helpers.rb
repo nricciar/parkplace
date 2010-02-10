@@ -122,9 +122,37 @@ module ParkPlace::S3
     end
 
     # Parse any ACL requests which have come in.
-    def requested_acl
-        # FIX: parse XML
-        raise NotImplemented if @input.has_key? 'acl'
+    def requested_acl(slot=nil)
+      if slot && @input.has_key?('acl')
+        @in.rewind
+        data = @in.read
+        xml_request = REXML::Document.new(data).root
+        xml_request.each_element('//Grant') do |element|
+          grantee = element.elements['Grantee']
+          case grantee.attributes["type"]
+          when "CanonicalUser"
+            user_check = Models::User.find_by_key(grantee.elements["ID"].text)
+            unless slot.owner.id == user_check.id
+              new_perm = element.elements['Permission'].text
+              new_access = "#{Models::Bit.acl_text.invert[new_perm]}00".to_i(8)
+
+              if slot.acl_list[user_check.key]
+                unless new_perm == slot.acl_list[user_check.key][:access]
+                  Models::BitsUser.update_all("access = #{new_access}", ["bit_id = ? AND user_id = ?", slot.id, user_check.id ])
+                end
+              else
+                # new permission
+                Models::BitsUser.create(:bit_id => slot.id, :user_id => user_check.id, :access => new_access)
+              end
+            end
+          when "Group"
+          when ""
+          else
+            raise NotImplemented
+          end
+        end
+      else
         {:access => ParkPlace::CANNED_ACLS[@amz['acl']] || ParkPlace::CANNED_ACLS['private']}
+      end
     end
 end

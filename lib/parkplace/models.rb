@@ -62,14 +62,12 @@ module ParkPlace::Models
           ret
         end
 
+        def self.acl_text
+          { 0 => "NONE", 1 => "NONE", 2 => "NONE", 3 => "NONE", 4 => "READ", 5 => "READ_APC", 6 => "WRITE", 7 => "WRITE_APC" }
+        end
+
         def acl_label(num)
-          case num.to_i
-          when 7 then "WRITE_APC"
-          when 6 then "WRITE"
-          when 5 then "READ_APC"
-          when 4 then "READ"
-          else "NONE"
-          end
+          Bit.acl_text[num.to_i]
         end
 
         def self.update_last_updated
