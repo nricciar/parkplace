@@ -12,6 +12,8 @@ module ParkPlace::Models
         validates_presence_of :password
         validates_confirmation_of :password
         attr_accessor :skip_before_save
+        has_many :bits_users
+
         def before_save
           unless self.skip_before_save
             @password_clean = self.password
@@ -27,28 +29,46 @@ module ParkPlace::Models
         end
     end
 
+    class BitsUser < Base
+        belongs_to :bit
+        belongs_to :user
+    end
+
     class Bit < Base
         acts_as_nested_set
         serialize :meta
         serialize :obj
         belongs_to :owner, :class_name => 'User', :foreign_key => 'owner_id'
+        has_many :bits_users
         has_and_belongs_to_many :users
         has_one :torrent
         validates_length_of :name, :within => 3..255
 
-        def anonymous_permission
-          case self.access
-          when 420 then "READ"
-          when 438 then "WRITE"
-          else nil
-          end
+        def acl_list
+          bit_perms = self.access.to_s(8)
+          acls = { :owner => { :id => self.owner.key, :type => "CanonicalUser", :name => self.owner.login, :access => "FULL_ACCESS" },
+            :anonymous => { :id => nil, :access => acl_label(bit_perms[2,1]), :type => "Group", :uri => "http://acs.amazonaws.com/groups/global/AllUsers" },
+            :authenticated => { :id => nil, :access => acl_label(bit_perms[1,1]), :type => "Group", :uri => "http://acs.amazonaws.com/groups/global/AuthenticatedUsers" }
+          }.merge(get_acls_for_bin)
+          acls.delete_if { |key,value| value[:access] == "NONE" || (key == :authenticated && value[:access] == acls[:anonymous][:access]) }
         end
 
-        def authenticated_permission
-          case self.access
-          when 416 then "READ"
-          when 432 then "WRITE"
-          else nil
+        def get_acls_for_bin
+          ret = {}
+          for a in self.bits_users
+            ret[a.user.key] = { :type => "CanonicalUser", :id => a.user.key, :name => a.user.login, :access => acl_label(a.access.to_s(8)[0,1]), 
+		:accessnum => a.access.to_s(8)[0,1] }
+          end
+          ret
+        end
+
+        def acl_label(num)
+          case num.to_i
+          when 7 then "WRITE_APC"
+          when 6 then "WRITE"
+          when 5 then "READ_APC"
+          when 4 then "READ"
+          else "NONE"
           end
         end
 
@@ -105,9 +125,11 @@ module ParkPlace::Models
             user and owner_id == user.id
         end
         def readable_by? user
+            return true if user && acl_list[user.key] && acl_list[user.key][:accessnum].to_i >= 4
             check_access(user, READABLE_BY_AUTH, READABLE)
         end
         def writable_by? user
+            return true if user && acl_list[user.key] && acl_list[user.key][:accessnum].to_i >= 6
             check_access(user, WRITABLE_BY_AUTH, WRITABLE)
         end
     end

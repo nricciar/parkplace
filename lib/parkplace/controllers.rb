@@ -4,7 +4,11 @@ module ParkPlace
     module SlotGet
         def head(bucket_name, oid)
             @slot = ParkPlace::Models::Bucket.find_root(bucket_name).find_slot(oid)
-            only_can_read @slot
+            if @input.has_key? 'acl'
+              only_can_write @slot
+            else
+              only_can_read @slot
+            end
 
             etag = @slot.etag
             since = Time.httpdate(@env.HTTP_IF_MODIFIED_SINCE) rescue nil
@@ -34,31 +38,18 @@ module ParkPlace
                     x.ID @slot.owner.key
                     x.DisplayName @slot.owner.login
                   end
-                  # owner
                   x.AccessControlList do
-                    x.Grant do
-                      x.Grantee "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance", "xsi:type" => "CanonicalUser" do
-                        x.ID @slot.owner.key
-                        x.DisplayName @slot.owner.login
-                      end
-                      x.Permission 'FULL_CONTROL'
-                    end
-                    if [416,432].include?(@slot.access) && !@slot.authenticated_permission.nil?
-                      # authenticated users
+                    @slot.acl_list.each_pair do |key,acl|
                       x.Grant do
-                        x.Grantee "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance", "xsi:type" => "Group" do
-                          x.URI "http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
+                        x.Grantee "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance", "xsi:type" => acl[:type] do
+                          if acl[:type] == "CanonicalUser"
+                            x.ID acl[:id]
+                            x.DisplayName acl[:name]
+                          else
+                            x.URI acl[:uri]
+                          end
                         end
-                        x.Permission @slot.authenticated_permission
-                      end
-                    end
-                    if [420,438].include?(@slot.access) && !@slot.anonymous_permission.nil?
-                      # anonymous
-                      x.Grant do
-                        x.Grantee "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance", "xsi:type" => "Group" do
-                          x.URI "http://acs.amazonaws.com/groups/global/AllUsers"
-                        end
-                        x.Permission @slot.anonymous_permission
+                        x.Permission acl[:access]
                       end
                     end
                   end
