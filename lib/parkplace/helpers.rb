@@ -125,6 +125,21 @@ module ParkPlace::S3
         self
     end
 
+    def versioning_response_for(bit)
+      if File.exists?(File.join(bit.fullpath,".git"))
+        g = Git.open (bit.fullpath, :log => Logger.new(STDOUT))
+        is_versioned = true
+      else
+        is_versioned = false
+      end
+
+      data = xml do |x|
+        x.VersioningConfiguration :xmlns => "http://s3.amazonaws.com/doc/2006-03-01/" do
+          x.Versioning is_versioned
+        end
+      end
+    end
+
     def acl_response_for(bit)
       data = xml do |x|
         x.AccessControlPolicy :xmlns => "http://s3.amazonaws.com/doc/2006-03-01/" do

@@ -46,7 +46,9 @@ module ParkPlace::Controllers
         end
         def get(bucket_name)
             bucket = Bucket.find_root(bucket_name)
-            if @input.has_key? 'acl'
+            if @input.has_key? 'versioning'
+                return versioning_response_for(bucket)
+            elsif @input.has_key? 'acl'
                 only_can_read_acp bucket
                 return acl_response_for(bucket)
             else
@@ -198,16 +200,11 @@ module ParkPlace::Controllers
                 raise BadDigest unless fileinfo.md5 == @env.HTTP_CONTENT_MD5
               end
 
-              fileinfo.path = File.join(bucket_name, rand(10000).to_s(36) + '_' + File.basename(temp_path))
-              fileinfo.path.succ! while File.exists?(File.join(STORAGE_PATH, fileinfo.path))
-              file_path = File.join(STORAGE_PATH, fileinfo.path)
-              FileUtils.mkdir_p(File.dirname(file_path))
-              FileUtils.mv(temp_path, file_path)
             end
 
             mdata = {}
             if defined?(EXIFR) && fileinfo.mime_type =~ /jpg|jpeg/
-              photo_data = EXIFR::JPEG.new(file_path).to_hash
+              photo_data = EXIFR::JPEG.new(temp_path).to_hash
               photo_data.each_pair do |key,value|
                 tmp = key.to_s.gsub(/[^a-z0-9]+/i, '-').downcase.gsub(/-$/,'')
                 mdata[tmp] = value.to_s
@@ -220,21 +217,38 @@ module ParkPlace::Controllers
             owner_id = @user ? @user.id : bucket.owner_id
             begin
                 slot = bucket.find_slot(oid)
-                prev_path = slot.obj.path
+                fileinfo.path = slot.obj.path
+                file_path = File.join(STORAGE_PATH,fileinfo.path)
                 slot.update_attributes(:owner_id => owner_id, :meta => meta, :obj => fileinfo)
-                # Remove the old file instead of leaving it lying around.
-                FileUtils.rm(File.join(STORAGE_PATH,prev_path)) unless prev_path == fileinfo.path
+		FileUtils.mv(temp_path, file_path,{ :force => true })
             rescue NoSuchKey
+                fileinfo.path = File.join(bucket_name, rand(10000).to_s(36) + '_' + File.basename(temp_path))
+                fileinfo.path.succ! while File.exists?(File.join(STORAGE_PATH, fileinfo.path))
+                file_path = File.join(STORAGE_PATH,fileinfo.path)
+                FileUtils.mkdir_p(File.dirname(file_path))
+                FileUtils.mv(temp_path, file_path)
                 slot = Slot.create(:name => oid, :owner_id => owner_id, :meta => meta, :obj => fileinfo)
                 bucket.add_child(slot)
             end
             slot.grant(requested_acl(slot))
+
+            if slot.versioning_enabled?
+              slot.git_repository.add(File.basename(fileinfo.path))
+              slot.git_repository.commit("Added #{slot.name} to the Git repository.")
+            end
+
             r(200, '', 'ETag' => slot.etag, 'Content-Length' => 0)
         end
         def delete(bucket_name, oid)
             bucket = Bucket.find_root bucket_name
             only_can_write bucket
             @slot = bucket.find_slot(oid)
+
+            if slot.versioning_enabled?
+              slot.git_repository.remove(File.basename(@slot.obj.path))
+              slot.git_repository.commit("Removed #{@slot.name} from the Git repository.")
+            end
+
             @slot.destroy
             r(204, '')
         rescue NoSuchKey

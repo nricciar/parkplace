@@ -38,6 +38,12 @@ if $PARKPLACE_ACCESSORIES
   end
 end
 begin
+    require "git"
+    puts "-- Git support found, versioning support enabled."
+rescue LoadError
+    puts "-- Git support not found, versioning support disabled."
+end
+begin
     require 'parkplace/torrent'
     puts "-- RubyTorrent found, torrent support is turned on."
     puts "-- TORRENT SUPPORT IS EXTREMELY EXPERIMENTAL -- WHAT I MEAN IS: IT PROBABLY DOESN'T WORK."

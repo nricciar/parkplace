@@ -133,15 +133,9 @@ module ParkPlace::Controllers
             fileinfo.md5 = md5.hexdigest
             fileinfo.etag = '"' + md5.hexdigest + '"'
 
-            fileinfo.path = File.join(bucket_name, File.basename(tmpf.path))
-            fileinfo.path.succ! while File.exists?(File.join(STORAGE_PATH, fileinfo.path))
-            file_path = File.join(STORAGE_PATH, fileinfo.path)
-            FileUtils.mkdir_p(File.dirname(file_path))
-            FileUtils.mv(tmpf.path, file_path)
-
             mdata = {}
             if defined?(EXIFR) && fileinfo.mime_type =~ /jpg|jpeg/
-              photo_data = EXIFR::JPEG.new(file_path).to_hash
+              photo_data = EXIFR::JPEG.new(tmpf.path).to_hash
               photo_data.each_pair do |key,value|
                 tmp = key.to_s.gsub(/[^a-z0-9]+/i, '-').downcase.gsub(/-$/,'')
                 mdata[tmp] = value.to_s
@@ -149,9 +143,28 @@ module ParkPlace::Controllers
             end
 
             @input.fname = @input.upfile.filename if @input.fname.blank?
-            slot = Slot.create(:name => @input.fname, :owner_id => @user.id, :meta => mdata, :obj => fileinfo)
-            slot.grant(:access => @input.facl.to_i)
-            bucket.add_child(slot)
+            begin
+              slot = bucket.find_slot(@input.fname)
+              fileinfo.path = slot.obj.path
+              file_path = File.join(STORAGE_PATH,fileinfo.path)
+              slot.update_attributes(:owner_id => @user.id, :meta => mdata, :obj => fileinfo)
+              FileUtils.mv(tmpf.path, file_path,{ :force => true })
+            rescue NoSuchKey
+              fileinfo.path = File.join(bucket_name, rand(10000).to_s(36) + '_' + File.basename(tmpf.path))
+              fileinfo.path.succ! while File.exists?(File.join(STORAGE_PATH, fileinfo.path))
+              file_path = File.join(STORAGE_PATH,fileinfo.path)
+              FileUtils.mkdir_p(File.dirname(file_path))
+              FileUtils.mv(tmpf.path, file_path)
+              slot = Slot.create(:name => @input.fname, :owner_id => @user.id, :meta => mdata, :obj => fileinfo)
+              slot.grant(:access => @input.facl.to_i)
+              bucket.add_child(slot)
+            end
+
+            if slot.versioning_enabled?
+              slot.git_repository.add(File.basename(fileinfo.path))
+              slot.git_repository.commit("Added #{slot.name} to the Git repository.")
+            end
+
             redirect CFiles, bucket_name
         end
     end
@@ -182,6 +195,12 @@ module ParkPlace::Controllers
             bucket = Bucket.find_root bucket_name
             only_can_write bucket
             slot = bucket.find_slot(oid)
+
+            if slot.versioning_enabled?
+              slot.git_repository.remove(File.basename(slot.obj.path))
+              slot.git_repository.commit("Removed #{slot.name} from the Git repository.")
+            end
+
             slot.destroy
             redirect CFiles, bucket_name
         end

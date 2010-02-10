@@ -44,6 +44,22 @@ module ParkPlace::Models
         has_one :torrent
         validates_length_of :name, :within => 3..255
 
+        def git_repository
+          versioning_enabled? ? Git.open (git_repository_path) : nil
+        end
+
+        def git_repository_path
+          File.join(File.dirname(self.fullpath))
+        end
+
+        def versioning_enabled?
+          File.exists?(File.join(git_repository_path,'.git')) ? true : false
+        end
+
+        def git_object
+          git_repository.gtree("HEAD").files[File.basename(self.obj.path)] if versioning_enabled? && self.obj
+        end
+
         def acl_list
           bit_perms = self.access.to_s(8)
           acls = { :owner => { :id => self.owner.key, :accessnum => 7, :type => "CanonicalUser", :name => self.owner.login, :access => "FULL_ACCESS" },

@@ -22,6 +22,9 @@ module ParkPlace
             if @slot.meta
                 @slot.meta.each { |k, v| headers["x-amz-meta-#{k}"] = v }
             end
+            if git_object = @slot.git_object
+                headers['x-amz-version-id'] = git_object.objectish if git_object
+            end
             if @slot.obj.is_a? ParkPlace::Models::FileInfo
                 headers['Content-Type'] = @slot.obj.mime_type
                 headers['Content-Disposition'] = @slot.obj.disposition
