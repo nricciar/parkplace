@@ -46,11 +46,13 @@ module ParkPlace::Models
 
         def acl_list
           bit_perms = self.access.to_s(8)
-          acls = { :owner => { :id => self.owner.key, :type => "CanonicalUser", :name => self.owner.login, :access => "FULL_ACCESS" },
-            :anonymous => { :id => nil, :access => acl_label(bit_perms[2,1]), :type => "Group", :uri => "http://acs.amazonaws.com/groups/global/AllUsers" },
-            :authenticated => { :id => nil, :access => acl_label(bit_perms[1,1]), :type => "Group", :uri => "http://acs.amazonaws.com/groups/global/AuthenticatedUsers" }
+          acls = { :owner => { :id => self.owner.key, :accessnum => 7, :type => "CanonicalUser", :name => self.owner.login, :access => "FULL_ACCESS" },
+            :anonymous => { :id => nil, :accessnum => bit_perms[2,1], :access => acl_label(bit_perms[2,1]), 
+		:type => "Group", :uri => "http://acs.amazonaws.com/groups/global/AllUsers" },
+            :authenticated => { :id => nil, :accessnum => bit_perms[1,1], :access => acl_label(bit_perms[1,1]), 
+		:type => "Group", :uri => "http://acs.amazonaws.com/groups/global/AuthenticatedUsers" }
           }.merge(get_acls_for_bin)
-          acls.delete_if { |key,value| value[:access] == "NONE" || (key == :authenticated && value[:access] == acls[:anonymous][:access]) }
+          acls.delete_if { |key,value| value[:access] == "NONE" || (key == :authenticated && (!acls[:anonymous].nil? && value[:accessnum] <= acls[:anonymous][:accessnum])) }
         end
 
         def get_acls_for_bin
@@ -63,7 +65,7 @@ module ParkPlace::Models
         end
 
         def self.acl_text
-          { 0 => "NONE", 1 => "NONE", 2 => "NONE", 3 => "NONE", 4 => "READ", 5 => "READ_APC", 6 => "WRITE", 7 => "WRITE_APC" }
+          { 0 => "NONE", 1 => "NONE", 2 => "NONE", 3 => "NONE", 4 => "READ", 5 => "READ_ACP", 6 => "WRITE", 7 => "WRITE_ACP" }
         end
 
         def acl_label(num)
@@ -122,6 +124,29 @@ module ParkPlace::Models
         def owned_by? user
             user and owner_id == user.id
         end
+
+        def acp_writable_by? user
+            # if owner
+            return true if user && user == owner
+            # if can write or better
+            return true if user && acl_list[user.key] && acl_list[user.key][:accessnum].to_i == 7
+            # if authenticated
+            return true if user && acl_list[:authenticated] && acl_list[:authenticated][:accessnum].to_i == 7
+            # if anonymous 
+            return true if acl_list[:anonymous] && acl_list[:anonymous][:accessnum].to_i == 7
+        end
+
+        def acp_readable_by? user
+            # if owner
+            return true if user && user == owner
+            # if can write or better
+            return true if user && acl_list[user.key] && acl_list[user.key][:accessnum].to_i >= 5
+            # if authenticated
+            return true if user && acl_list[:authenticated] && acl_list[:authenticated][:accessnum].to_i >= 5
+            # if anonymous 
+            return true if acl_list[:anonymous] && acl_list[:anonymous][:accessnum].to_i >= 5
+        end
+
         def readable_by? user
             return true if user && acl_list[user.key] && acl_list[user.key][:accessnum].to_i >= 4
             check_access(user, READABLE_BY_AUTH, READABLE)

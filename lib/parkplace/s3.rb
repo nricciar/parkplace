@@ -28,7 +28,7 @@ module ParkPlace::Controllers
             only_authorized
             bucket = Bucket.find_root(bucket_name)
             only_owner_of bucket
-            bucket.grant(requested_acl)
+            bucket.grant(requested_acl(bucket))
             r(200, '', 'Location' => @env.PATH_INFO, 'Content-Length' => 0)
         rescue NoSuchBucket
             Bucket.create(:name => bucket_name, :owner_id => @user.id).grant(requested_acl)
@@ -46,7 +46,12 @@ module ParkPlace::Controllers
         end
         def get(bucket_name)
             bucket = Bucket.find_root(bucket_name)
-            only_can_read bucket
+            if @input.has_key? 'acl'
+                only_can_read_acp bucket
+                return acl_response_for(bucket)
+            else
+                only_can_read bucket
+            end
 
             if @input.has_key? 'torrent'
                 return torrent(bucket)

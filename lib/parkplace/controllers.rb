@@ -5,7 +5,7 @@ module ParkPlace
         def head(bucket_name, oid)
             @slot = ParkPlace::Models::Bucket.find_root(bucket_name).find_slot(oid)
             if @input.has_key? 'acl'
-              only_can_write @slot
+              only_can_read_acp @slot
             else
               only_can_read @slot
             end
@@ -32,32 +32,8 @@ module ParkPlace
         def get(bucket_name, oid)
             head(bucket_name, oid)
             if @input.has_key? 'acl'
-              data = xml do |x|
-                x.AccessControlPolicy :xmlns => "http://s3.amazonaws.com/doc/2006-03-01/" do
-                  x.Owner do
-                    x.ID @slot.owner.key
-                    x.DisplayName @slot.owner.login
-                  end
-                  x.AccessControlList do
-                    @slot.acl_list.each_pair do |key,acl|
-                      x.Grant do
-                        x.Grantee "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance", "xsi:type" => acl[:type] do
-                          if acl[:type] == "CanonicalUser"
-                            x.ID acl[:id]
-                            x.DisplayName acl[:name]
-                          else
-                            x.URI acl[:uri]
-                          end
-                        end
-                        x.Permission acl[:access]
-                      end
-                    end
-                  end
-                end
-              end
-              return data
-            end
-            if @input.has_key? 'torrent'
+                acl_response_for(@slot)
+            elsif @input.has_key? 'torrent'
                 torrent @slot
             elsif @slot.obj.kind_of?(ParkPlace::Models::FileInfo) && @env.HTTP_RANGE =~ /^bytes=(\d+)?-(\d+)?$/ # yay, parse basic ranges
                 range_start = $1
