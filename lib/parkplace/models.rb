@@ -44,6 +44,22 @@ module ParkPlace::Models
         has_one :torrent
         validates_length_of :name, :within => 3..255
 
+        def git_init
+          begin
+            FileUtils.mkdir_p(self.fullpath) unless File.exists?(self.fullpath)
+            dir_empty = !Dir.foreach(self.fullpath) {|n| break true unless /\A\.\.?\z/ =~ n}
+            g = Git.init(self.fullpath)
+            # if directory is not empty we need to add the files
+            # into version control
+            unless dir_empty
+              g.add('.')
+              g.commit_all("Enabling versioning for bucket #{self.name}.")
+            end
+          rescue Git::GitExecuteError => error_message
+            puts "GIT: #{error_message}"
+          end
+        end
+
         def git_repository
           versioning_enabled? ? Git.open (git_repository_path) : nil
         end
@@ -53,11 +69,11 @@ module ParkPlace::Models
         end
 
         def versioning_enabled?
-          File.exists?(File.join(git_repository_path,'.git')) ? true : false
+          defined?(Git) && File.exists?(File.join(git_repository_path,'.git')) ? true : false
         end
 
         def git_object
-          git_repository.gtree("HEAD").files[File.basename(self.obj.path)] if versioning_enabled? && self.obj
+          git_repository.log.path(File.basename(self.obj.path)).first if versioning_enabled? && self.obj
         end
 
         def acl_list
@@ -174,7 +190,7 @@ module ParkPlace::Models
     end
 
     class Bucket < Bit
-        validates_format_of :name, :with => /^[-\w]+$/
+        validates_format_of :name, :with => /^[-.\w]+$/
         def self.find_root(bucket_name)
             find(:first, :conditions => ['deleted = 0 AND parent_id IS NULL AND name = ?', bucket_name]) or raise NoSuchBucket
         end

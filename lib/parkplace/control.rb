@@ -108,6 +108,16 @@ module ParkPlace::Controllers
         end
     end
 
+    class CBucketVersioning < R '/control/buckets/([^\/]+)/versioning'
+        login_required
+        def post(bucket_name)
+            @bucket = Bucket.find_root(bucket_name)
+            only_can_write bucket
+            @bucket.git_init if defined?(Git)
+            redirect CFiles, @bucket.name
+        end
+    end
+
     class CFiles < R '/control/buckets/([^\/]+)'
         login_required
         def get(bucket_name)
@@ -186,6 +196,17 @@ module ParkPlace::Controllers
                 bucket.destroy
             end
             redirect CBuckets
+        end
+    end
+
+    class CFileChanges < R '/control/changes/(.+?)/(.+)'
+        login_required
+        def get(bucket_name, oid)
+          @bucket = Bucket.find_root bucket_name
+          @file = @bucket.find_slot(oid)
+          only_owner_of @bucket
+          @versions = @bucket.git_repository.log.path(File.basename(@file.obj.path))
+          render :popup, "Changes For #{@file.name}", :changes
         end
     end
 
@@ -305,6 +326,20 @@ module ParkPlace::Views
         opts[:class] = (@env.PATH_INFO =~ /^#{opts[:href]}/ ? "active" : "inactive")
         opts
     end
+    def popup(str, view)
+        html do
+            head do
+                title { "Park Place Control Center &raquo; " + str }
+                style "@import '/control/s/css/control.css';", :type => 'text/css'
+            end
+            body do
+              div.content! do
+                __send__ "control_#{view}"
+              end
+            end
+        end
+    end
+
     def control(str, view)
         html do
             head do
@@ -365,7 +400,7 @@ module ParkPlace::Views
                     th "Name"
                     th "Contains"
                     th "Updated on"
-                    th "Permission"
+                    th "Info"
                     th "Actions"
                 end
                 tbody do
@@ -373,11 +408,10 @@ module ParkPlace::Views
                         tr do
                             th { 
                               div { a bucket.name, :href => R(CFiles, bucket.name) }
-                              div { i { small { "Versioning Enabled" } } } if bucket.versioning_enabled?
                             }
                             td "#{bucket.total_children rescue 0} files"
                             td bucket.updated_at
-                            td bucket.access_readable
+                            td bucket.access_readable + (bucket.versioning_enabled? ? ",versioned" : "")
                             td { a "Delete", :href => R(CDeleteBucket, bucket.name), :onClick => POST, :title => "Delete bucket #{bucket.name}" }
                         end
                     end
@@ -411,7 +445,18 @@ module ParkPlace::Views
     def control_files
         p "Click on a file name to get file and torrent details."
         table do
-            caption { a(:href => R(CBuckets)) { self << "&larr; Buckets" } }
+            caption {
+              if defined?(Git)
+                span(:style => "float:right") {
+                  if !@bucket.versioning_enabled? 
+                    a(:href=>R(CBucketVersioning,@bucket.name), :onClick => POST) { "Enable Versioning For This Bucket" }
+                  else
+                    "Versioning Enabled"
+                  end
+                }
+              end
+              a(:href => R(CBuckets)) { self << "&larr; Buckets" } 
+            }
             thead do
                 th "File"
                 th "Size"
@@ -423,9 +468,11 @@ module ParkPlace::Views
                         th do
                             a file.name, :href => "javascript://", :onclick => "$('#details-#{file.id}').toggle()"
                             div.details :id => "details-#{file.id}" do
+                                p "Revision: #{file.git_object.objectish}" if @bucket.versioning_enabled?
                                 p "Last modified on #{file.updated_at}"
                                 p do
-                                    info = [a("Get", :href => R(CFile, @bucket.name, file.name))]
+                                    info = [a("Get", :target => "_blank", :href => R(CFile, @bucket.name, file.name))]
+                                    info += [a("Changes", :onclick => "window.open(this.href,'changelog','height=600,width=500');return false;", :href => R(CFileChanges,@bucket.name,file.name))] if @bucket.versioning_enabled?
                                     info += [a("Torrent", :href => R(RSlot, @bucket.name, file.name) + "?torrent")]
                                     if file.torrent
                                         info += ["#{file.torrent.seeders} seeders", 
@@ -464,6 +511,25 @@ module ParkPlace::Views
                 end
             end
             input.newfile! :type => 'submit', :value => "Create"
+        end
+    end
+
+    def control_changes
+        table do
+            thead do
+                th "Commit Log For #{@file.name}"
+            end
+            tbody do
+                @versions.each do |version|
+                    tr {
+                    td { 
+                      div { a(:target => "_blank", :href => R(CFile, @bucket.name, @file.name).to_s + "?version-id=#{version.sha}") { version.sha } }
+                      div "On: #{version.date}"
+                      div "By: #{version.author.name} <#{version.author.email}>"
+                    }
+                  }
+                end
+            end
         end
     end
 

@@ -171,18 +171,8 @@ module ParkPlace::S3
         # check if we are enabling version control
         # FIXME: does not disable version control
         if !slot.versioning_enabled? && xml_request.elements['Status'].text == 'Enabled'
-          begin
-            dir_empty = !Dir.foreach(slot.fullpath) {|n| break true unless /\A\.\.?\z/ =~ n}
-            g = Git.init(slot.fullpath)
-            # if directory is not empty we need to add the files
-            # into version control
-            unless dir_empty
-              g.add('.')
-              g.commit_all("Enabling versioning for bucket #{slot.name}.")
-            end
-          rescue Git::GitExecuteError => error_message
-            puts "GIT: #{error_message}"
-          end
+          raise NotImplemented unless defined?(Git)
+          slot.git_init
         end
       elsif slot && @input.has_key?('acl')
         only_can_write_acp slot
