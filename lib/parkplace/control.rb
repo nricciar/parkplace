@@ -2,7 +2,7 @@ require 'parkplace/mimetypes_hash'
 
 class Class
     def login_required
-        include Camping::Session, ParkPlace::UserSession, ParkPlace::Base, ParkPlace::S3
+        include Camping::Session, ParkPlace::UserSession, ParkPlace::Base
     end
 end
 class HashWithIndifferentAccess
