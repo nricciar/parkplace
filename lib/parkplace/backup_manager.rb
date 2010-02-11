@@ -64,7 +64,6 @@ class BackupHandler < Mongrel::HttpHandler
             if Models::Bit.last_time_updated > request.params["HTTP_IF_MODIFIED_SINCE"].to_i
               puts "[#{Time.now}] Pushing new updates to #{slave_host}"
               @@known_hosts[slave_host.to_s][:status] = "out of sync"
-
               conditions = [ 'updated_at > ?', Time.at(request.params["HTTP_IF_MODIFIED_SINCE"].to_i) ]
               @bits = Models::Bit.find(:all, :conditions => conditions, :order => "updated_at ASC", :limit => 25, :include => :bits_users)
               @bits += Models::User.find(:all, :conditions => conditions, :order => "updated_at ASC", :limit => 25)
@@ -76,11 +75,11 @@ class BackupHandler < Mongrel::HttpHandler
           end
           if @bits.empty?
             head['Last-Modified'] = Models::Bit.last_time_updated
-            out << [].to_yaml
+            out << Marshal.dump([])
           else
             head['Last-Modified'] = @bits.last.updated_at.to_i
             @bits.sort! { |x,y| x.updated_at <=> y.updated_at }
-            out << @bits.to_yaml
+            out << Marshal.dump(@bits)
           end
       end
     end

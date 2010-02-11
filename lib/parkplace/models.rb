@@ -49,6 +49,8 @@ module ParkPlace::Models
             FileUtils.mkdir_p(self.fullpath) unless File.exists?(self.fullpath)
             dir_empty = !Dir.foreach(self.fullpath) {|n| break true unless /\A\.\.?\z/ =~ n}
             g = Git.init(self.fullpath)
+            g.config('user.name', self.owner.login)
+            g.config('user.email', self.owner.email)
             # if directory is not empty we need to add the files
             # into version control
             unless dir_empty

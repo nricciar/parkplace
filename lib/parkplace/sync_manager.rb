@@ -78,7 +78,7 @@ module ParkPlace
       @bits = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits ORDER BY updated_at DESC LIMIT 0,1}]
 
       get_file("/backup",(@bits.empty? ? nil : @bits[0].updated_at.to_i.to_s)) do |feed|
-        new_data = YAML::load(feed)
+        new_data = Marshal.load(feed)
         new_data.each do |r|
           case r.class.to_s
           when "ParkPlace::Models::User"
@@ -141,6 +141,23 @@ module ParkPlace
             tmp.parent_id = r.attributes['parent_id']
             tmp.rgt = r.attributes['rgt']
             tmp.deleted = r.attributes['deleted']
+            if r.bits_users
+              # import acls
+              r.bits_users.each { |bu| 
+                # delete acls that exist in our database, but not sent with update
+                tmp.bits_users.delete_if { |acl| !r.bits_users.map(&:id).include?(acl.id) }
+                # check if we have the acl, if not create it
+                acl = Models::BitsUser.find_by_id(bu.id)
+                if acl.nil?
+                  acl = Models::BitsUser.new() 
+                  acl.id = bu.id
+                  acl.user_id = bu.user_id
+                  acl.bit_id = bu.bit_id
+                end
+                acl.access = bu.access
+                acl.save(false)
+              }
+            end
           end # for case
           class << tmp
             def record_timestamps

@@ -210,6 +210,7 @@ module ParkPlace::S3
             raise NotImplemented
           end
         end
+        {}
       else
         {:access => ParkPlace::CANNED_ACLS[@amz['acl']] || ParkPlace::CANNED_ACLS['private']}
       end
