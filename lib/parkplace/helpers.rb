@@ -126,16 +126,9 @@ module ParkPlace::S3
     end
 
     def versioning_response_for(bit)
-      if File.exists?(File.join(bit.fullpath,".git"))
-        g = Git.open (bit.fullpath, :log => Logger.new(STDOUT))
-        is_versioned = true
-      else
-        is_versioned = false
-      end
-
       data = xml do |x|
         x.VersioningConfiguration :xmlns => "http://s3.amazonaws.com/doc/2006-03-01/" do
-          x.Versioning is_versioned
+          x.Versioning bit.versioning_enabled? ? 'Enabled' : 'Suspended'
         end
       end
     end
@@ -169,7 +162,29 @@ module ParkPlace::S3
 
     # Parse any ACL requests which have come in.
     def requested_acl(slot=nil)
-      if slot && @input.has_key?('acl')
+      if slot && @input.has_key?('versioning')
+        only_can_write_acp slot
+        @in.rewind
+        data = @in.read
+        xml_request = REXML::Document.new(data).root
+
+        # check if we are enabling version control
+        # FIXME: does not disable version control
+        if !slot.versioning_enabled? && xml_request.elements['Status'].text == 'Enabled'
+          begin
+            dir_empty = !Dir.foreach(slot.fullpath) {|n| break true unless /\A\.\.?\z/ =~ n}
+            g = Git.init(slot.fullpath)
+            # if directory is not empty we need to add the files
+            # into version control
+            unless dir_empty
+              g.add('.')
+              g.commit_all("Enabling versioning for bucket #{slot.name}.")
+            end
+          rescue Git::GitExecuteError => error_message
+            puts "GIT: #{error_message}"
+          end
+        end
+      elsif slot && @input.has_key?('acl')
         only_can_write_acp slot
         @in.rewind
         data = @in.read

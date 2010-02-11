@@ -3,7 +3,27 @@ require 'fileutils'
 module ParkPlace
     module SlotGet
         def head(bucket_name, oid)
-            @slot = ParkPlace::Models::Bucket.find_root(bucket_name).find_slot(oid)
+            bucket = ParkPlace::Models::Bucket.find_root(bucket_name)
+            if @input.has_key? 'version-id'
+              @revision = Git::Object.new(bucket.git_repository,@input['version-id'],'commit')
+              headers['x-amz-version-id'] = @revision.sha
+
+              # this is still the most recent record which is wrong
+              # this also means that metadata or acls are not saved
+              # with their revisions at the moment
+              @slot = bucket.find_slot(oid)
+              @slot.updated_at = @revision.date()
+
+              @revision_file = @revision.gtree().blobs[File.basename(@slot.obj.path)]
+            else
+              @slot = bucket.find_slot(oid)
+
+              # check to see if versioning is enabled then display 
+              # version information if needed
+              git_object = @slot.git_object
+              headers['x-amz-version-id'] = git_object.objectish if git_object
+            end
+
             if @input.has_key? 'acl'
               only_can_read_acp @slot
             else
@@ -22,9 +42,7 @@ module ParkPlace
             if @slot.meta
                 @slot.meta.each { |k, v| headers["x-amz-meta-#{k}"] = v }
             end
-            if git_object = @slot.git_object
-                headers['x-amz-version-id'] = git_object.objectish if git_object
-            end
+
             if @slot.obj.is_a? ParkPlace::Models::FileInfo
                 headers['Content-Type'] = @slot.obj.mime_type
                 headers['Content-Disposition'] = @slot.obj.disposition
@@ -36,6 +54,8 @@ module ParkPlace
             head(bucket_name, oid)
             if @input.has_key? 'acl'
                 acl_response_for(@slot)
+            elsif @input.has_key? 'version-id'
+                @revision_file.contents
             elsif @input.has_key? 'torrent'
                 torrent @slot
             elsif @slot.obj.kind_of?(ParkPlace::Models::FileInfo) && @env.HTTP_RANGE =~ /^bytes=(\d+)?-(\d+)?$/ # yay, parse basic ranges

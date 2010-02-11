@@ -49,7 +49,7 @@ module ParkPlace::Models
         end
 
         def git_repository_path
-          File.join(File.dirname(self.fullpath))
+          self.obj ? File.join(File.dirname(self.fullpath)) : self.fullpath
         end
 
         def versioning_enabled?

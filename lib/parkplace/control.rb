@@ -2,7 +2,7 @@ require 'parkplace/mimetypes_hash'
 
 class Class
     def login_required
-        include Camping::Session, ParkPlace::UserSession, ParkPlace::Base
+        include Camping::Session, ParkPlace::UserSession, ParkPlace::Base, ParkPlace::S3
     end
 end
 class HashWithIndifferentAccess
@@ -371,7 +371,10 @@ module ParkPlace::Views
                 tbody do
                     @buckets.each do |bucket|
                         tr do
-                            th { a bucket.name, :href => R(CFiles, bucket.name) }
+                            th { 
+                              div { a bucket.name, :href => R(CFiles, bucket.name) }
+                              div { i { small { "Versioning Enabled" } } } if bucket.versioning_enabled?
+                            }
                             td "#{bucket.total_children rescue 0} files"
                             td bucket.updated_at
                             td bucket.access_readable

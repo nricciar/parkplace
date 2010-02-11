@@ -233,8 +233,13 @@ module ParkPlace::Controllers
             slot.grant(requested_acl(slot))
 
             if slot.versioning_enabled?
-              slot.git_repository.add(File.basename(fileinfo.path))
-              slot.git_repository.commit("Added #{slot.name} to the Git repository.")
+              begin
+                slot.git_repository.add(File.basename(fileinfo.path))
+                tmp = slot.git_repository.commit("Added #{slot.name} to the Git repository.")
+                headers['x-amz-version-id'] = slot.git_object.objectish
+              rescue Git::GitExecuteError => error_message
+                puts "GIT: #{error_message}"
+              end
             end
 
             r(200, '', 'ETag' => slot.etag, 'Content-Length' => 0)
@@ -245,8 +250,12 @@ module ParkPlace::Controllers
             @slot = bucket.find_slot(oid)
 
             if slot.versioning_enabled?
-              slot.git_repository.remove(File.basename(@slot.obj.path))
-              slot.git_repository.commit("Removed #{@slot.name} from the Git repository.")
+              begin
+                slot.git_repository.remove(File.basename(@slot.obj.path))
+                slot.git_repository.commit("Removed #{@slot.name} from the Git repository.")
+              rescue Git::GitExecuteError => error_message
+                puts "GIT: #{error_message}"
+              end
             end
 
             @slot.destroy

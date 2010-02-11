@@ -1,11 +1,19 @@
+ParkPlace with added support for acls, versioning, and replication.
+
 Required:
   gem install camping mongrel --include-dependancies
   gem install sendfile
 
 Optional:
-  rfuzz - replacement for net/http
-  curb  - replacement for net/http
-  exifr - used to extract metadata for jpeg images
+  Metadata
+  exifr    - used to extract metadata for jpeg images
+
+  Master/Slave Replication
+  rfuzz    - replacement for net/http
+  curb     - replacement for net/http
+
+  S3 Versioning Support
+  ruby-git - for S3 Versioning (http://doc.s3.amazonaws.com/betadesign/Versioning.html)
 
 Run:
   bin/parkplace
