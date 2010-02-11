@@ -64,15 +64,15 @@ class BackupHandler < Mongrel::HttpHandler
             if Models::Bit.last_time_updated > request.params["HTTP_IF_MODIFIED_SINCE"].to_i
               puts "[#{Time.now}] Pushing new updates to #{slave_host}"
               @@known_hosts[slave_host.to_s][:status] = "out of sync"
-              @bits = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits WHERE updated_at > ? ORDER BY updated_at ASC LIMIT 0,25}, 
-		Time.at(request.params["HTTP_IF_MODIFIED_SINCE"].to_i) ]
-              @bits += Models::User.find_by_sql [%{ SELECT * FROM parkplace_users WHERE updated_at > ? ORDER BY updated_at ASC LIMIT 0,25}, 
-		Time.at(request.params["HTTP_IF_MODIFIED_SINCE"].to_i) ]
+
+              conditions = [ 'updated_at > ?', Time.at(request.params["HTTP_IF_MODIFIED_SINCE"].to_i) ]
+              @bits = Models::Bit.find(:all, :conditions => conditions, :order => "updated_at ASC", :limit => 25, :include => :bits_users)
+              @bits += Models::User.find(:all, :conditions => conditions, :order => "updated_at ASC", :limit => 25)
             end
           else
             puts "Initial slave update for #{slave_host}"
-            @bits = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits ORDER BY updated_at ASC LIMIT 0,25}]
-            @bits += Models::User.find_by_sql [%{ SELECT * FROM parkplace_users ORDER BY updated_at ASC LIMIT 0,25}]
+            @bits = Models::Bit.find(:all, :order => "updated_at ASC", :limit => 25, :include => :bits_users)
+            @bits += Models::User.find(:all, :order => "updated_at ASC", :limit => 25)
           end
           if @bits.empty?
             head['Last-Modified'] = Models::Bit.last_time_updated

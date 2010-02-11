@@ -39,6 +39,16 @@ module ParkPlace::UserSession
             redirect Controllers::CLogin
         end
         self
+     rescue ParkPlace::ServiceError => e
+        xml e.status do |x|
+            x.Error do
+                x.Code e.code
+                x.Message e.message
+                x.Resource @env.PATH_INFO
+                x.RequestId Time.now.to_i
+            end
+        end
+        self
     end
 end
 
@@ -103,8 +113,14 @@ module ParkPlace::Controllers
             @bucket.errors.add_to_base("A bucket named `#{@input.bucket.name}' already exists.")
             render :control, 'Your Buckets', :buckets
         rescue NoSuchBucket
-            bucket = Bucket.create(@input.bucket)
-            redirect CBuckets
+            bucket = Bucket.new(@input.bucket)
+            if bucket.save()
+              redirect CBuckets
+            else
+              load_buckets
+              @bucket.errors.add_to_base("Invalid bucket name.")
+              render :control, 'Your Buckets', :buckets
+            end
         end
     end
 
@@ -128,8 +144,16 @@ module ParkPlace::Controllers
             render :control, "/#{@bucket.name}", :files
         end
         def post(bucket_name)
-            bucket = Bucket.find_root(bucket_name)
+            @bucket = Bucket.find_root(bucket_name)
             only_can_write bucket
+
+            if @input.upfile.instance_of?(String)
+              error "No file specified."
+              @files = Slot.find :all, :include => :torrent,
+                :conditions => ['deleted = 0 AND parent_id = ?', @bucket.id], :order => 'name'
+              redirect CFiles, bucket.name
+              return
+            end
 
             tmpf = @input.upfile.tempfile
             readlen, md5 = 0, MD5.new
@@ -154,7 +178,7 @@ module ParkPlace::Controllers
 
             @input.fname = @input.upfile.filename if @input.fname.blank?
             begin
-              slot = bucket.find_slot(@input.fname)
+              slot = @bucket.find_slot(@input.fname)
               fileinfo.path = slot.obj.path
               file_path = File.join(STORAGE_PATH,fileinfo.path)
               slot.update_attributes(:owner_id => @user.id, :meta => mdata, :obj => fileinfo)
@@ -167,7 +191,7 @@ module ParkPlace::Controllers
               FileUtils.mv(tmpf.path, file_path)
               slot = Slot.create(:name => @input.fname, :owner_id => @user.id, :meta => mdata, :obj => fileinfo)
               slot.grant(:access => @input.facl.to_i)
-              bucket.add_child(slot)
+              @bucket.add_child(slot)
             end
 
             if slot.versioning_enabled?
@@ -443,6 +467,7 @@ module ParkPlace::Views
     end
 
     def control_files
+        errors_for @state
         p "Click on a file name to get file and torrent details."
         table do
             caption {
@@ -463,6 +488,9 @@ module ParkPlace::Views
                 th "Permission"
             end
             tbody do
+                if @files.empty?
+                  tr { td(:colspan => "3", :style => "padding:15px;text-align:center") { "No Files" } }
+                end
                 @files.each do |file|
                     tr do
                         th do
