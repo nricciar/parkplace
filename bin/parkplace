@@ -17,9 +17,6 @@ DEFAULT_SECRET = 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV'
 options = ParkPlace.options
 options.host = "127.0.0.1"
 options.port = 3002
-options.daemon = false
-options.slave = false
-options.master_host = ''
 
 opts = OptionParser.new do |opts|
     opts.banner = "Usage: parkplace [options] [host] [port]"
@@ -37,17 +34,24 @@ opts = OptionParser.new do |opts|
         options.daemon = true
     end
 
-    opts.on("-r", "--replicate MASTER_HOSTNAME", "Run as slave / mirror masters contents") do |s|
-        options.slave = true
-        options.master_host = s.to_s unless s.nil?
+    opts.on("-r", "--replicate HOSTNAME", "Mirror master server") do |s|
+        options.replication = { }
+        options.replication[:enabled] = true unless s.nil?
+        options.replication[:host] = s
+    end
+
+    opts.on("--replicate-secret KEY", "secret key for replication") do |s|
+        options.replication ||= { }
+        options.replication[:secret_access_key] ||= s
+    end
+
+    opts.on("--replicate-user USERNAME", "for authentication (defaults to 'admin')") do |k|
+        options.replication ||= { }
+        options.replication[:username] ||= k
     end
 
     opts.on("-v", "--verbose", "Run verbosely") do |v|
         options.verbose = v
-    end
-
-    opts.on("-s", "--strict", "S3 API ONLY (No added ParkPlace features)") do |v|
-        $PARKPLACE_ACCESSORIES = false
     end
 
     opts.on("-u", "--debug", "Debug Mode") do |v|
@@ -57,6 +61,10 @@ opts = OptionParser.new do |opts|
         rescue LoadError
         end
         $DEBUG = v
+    end
+
+    opts.on("-s", "--strict", "S3 API ONLY (No added ParkPlace features)") do |v|
+        $PARKPLACE_ACCESSORIES = false
     end
 
     opts.separator ""
@@ -99,4 +107,4 @@ if num_users == 1 and admin and admin.password == hmac_sha1( DEFAULT_PASSWORD, a
     puts "** You should change the default password for the admin at soonest chance!"
 end
 
-ParkPlace.serve(options.host, options.port, options)
+ParkPlace.serve(options.host, options.port)

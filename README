@@ -18,10 +18,20 @@ Optional:
 Run:
   bin/parkplace
 
-More Options:
+Specific options:
+    -d, --directory DIRECTORY        Park Place directory (defaults to ~/.parkplace)
+    -D, --daemon                     Daemon mode (run in background)
+    -r, --replicate HOSTNAME         Mirror master server
+        --replicate-secret KEY       secret key for replication
+        --replicate-user USERNAME    for authentication (defaults to 'admin')
+    -v, --verbose                    Run verbosely
+    -u, --debug                      Debug Mode
+    -s, --strict                     S3 API ONLY (No added ParkPlace features)
 
-  bin/parkplace --help
+Common options:
+    -h, --help                       Show this message
+        --version                    Show version
 
-Replicate Your Parkplace Server:
-
-  bin/parkplace -r master.server
+Park Place will attempt to load its default configuration from config.yaml in the Park 
+Place root directory if the file exists.  See example-config.yaml for more information 
+on options available.

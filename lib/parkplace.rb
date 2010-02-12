@@ -58,7 +58,7 @@ module ParkPlace
     BUFSIZE = (4 * 1024)
     STORAGE_PATH = File.join(Dir.pwd, 'storage')
     STATIC_PATH = File.expand_path('../static', File.dirname(__FILE__))
-    RESOURCE_TYPES = %w[acl torrent]
+    RESOURCE_TYPES = %w[acl torrent versioning]
     CANNED_ACLS = {
         'private' => 0600,
         'public-read' => 0644,
@@ -78,7 +78,7 @@ module ParkPlace
             Camping::Models::Session.create_schema
             Models.create_schema :assume => v
         end
-        def options
+        def default_options
             require 'ostruct'
             options = OpenStruct.new
             if options.parkplace_dir.nil?
@@ -95,6 +95,15 @@ module ParkPlace
             end
             options
         end
+
+        def options
+          @options ||= default_options
+        end
+
+        def options=(val)
+          @options = val
+        end
+
         def config(options)
             require 'ftools'
             require 'yaml'
@@ -102,10 +111,14 @@ module ParkPlace
             File.makedirs( options.parkplace_dir )
             conf = File.join( options.parkplace_dir, 'config.yaml' )
             if File.exists? conf
-                YAML.load_file( conf ).each { |k,v| options.__send__("#{k}=", v) if options.__send__(k).nil? }
+                puts "** Using config from #{conf}"
+                YAML.load_file(conf).marshal_dump.each { |k,v| options.__send__("#{k}=", v) if options.__send__(k).nil? }
             end
             options.storage_dir = File.expand_path(options.storage_dir || 'storage', options.parkplace_dir)
-            options.database ||= {:adapter => 'sqlite3', :database => File.join(options.parkplace_dir, (options.slave == true ? 'park-slave.db' : 'park.db'))}
+            options.log_dir = File.expand_path(options.log_dir || 'log', options.parkplace_dir)
+            FileUtils.mkdir_p(options.log_dir) unless File.exists?(options.log_dir)
+            options.database ||= {:adapter => 'sqlite3', :database => File.join(options.parkplace_dir, (!options.replication.nil? && 
+		options.replication[:enabled] ? 'park-slave.db' : 'park.db'))}
             if options.database[:adapter] == 'sqlite3'
                 begin
                     require 'sqlite3_api'
@@ -116,7 +129,7 @@ module ParkPlace
             end
             ParkPlace::STORAGE_PATH.replace options.storage_dir
         end
-        def serve(host, port, options)
+        def serve(host, port)
             require 'mongrel'
             require 'mongrel/camping'
             if $PARKPLACE_PROGRESS
@@ -124,9 +137,11 @@ module ParkPlace
               GemPlugin::Manager.instance.load "mongrel" => GemPlugin::INCLUDE
             end
 
-            config = Mongrel::Configurator.new( :host => host, :pid_file => "log/parkplace.#{port}.pid") do
-                write_pid_file if options.daemon
-                daemonize(:cwd => Dir.pwd, :log_file => "log/" + (options.slave == true ? "slave" : "server") + ".log") unless options.daemon == false
+            config = Mongrel::Configurator.new( :host => host, :pid_file => File.join(ParkPlace.options.log_dir, "parkplace.#{port}.pid")) do
+                if ParkPlace.options.daemon
+                  write_pid_file
+                  daemonize(:cwd => Dir.pwd, :log_file => File.join(ParkPlace.options.log_dir, "server.log"))
+                end
 
                 listener :port => port do
                     uri "/", :handler => Mongrel::Camping::CampingHandler.new(ParkPlace)
@@ -142,24 +157,25 @@ module ParkPlace
                 end
             end
 
-            if $PARKPLACE_ACCESSORIES && options.slave == true
-              thread = Thread.new do
+            # save current configuration to last-valid.yaml
+            File.open(File.join( ParkPlace.options.parkplace_dir, 'last-valid.yaml' ), 'w') { |f| f.write(YAML::dump(ParkPlace.options)) }
+            puts "** ParkPlace is running at http://#{host}:#{port}/"
+            puts "** Visit http://#{host}:#{port}/control/ for the control center."
+            puts "** Use CTRL+C to stop" unless ParkPlace.options.daemon
+
+            # start our connection with the server if we are running
+            # as a slave
+            if $PARKPLACE_ACCESSORIES && ParkPlace.options.replication
                 trap("INT") { exit }
-                sync_manager = SyncManager.new({ :server => options.master_host })
+                sync_manager = SyncManager.new({ :server => ParkPlace.options.replication[:host],
+			:username => ParkPlace.options.replication[:username], :secret_key => ParkPlace.options.replication[:secret_key] })
 
                 while true do
                   sync_manager.run
                   sleep 5
                   puts "[#{Time.now}] polling..."
                 end
-              end
-              thread.join
             end
-            if $PARKPLACE_ACCESSORIES
-              puts "** ParkPlace example is running at http://#{host}:#{port}/"
-              puts "** Visit http://#{host}:#{port}/control/ for the control center."
-            end
-            puts "** Use CTRL+C to stop" unless options.daemon
             config.join
         end
     end

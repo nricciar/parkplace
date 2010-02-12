@@ -63,7 +63,7 @@ module ParkPlace::Models
         end
 
         def git_repository
-          versioning_enabled? ? Git.open (git_repository_path) : nil
+          versioning_enabled? ? Git.open(git_repository_path) : nil
         end
 
         def git_repository_path
