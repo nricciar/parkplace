@@ -15,6 +15,9 @@ Optional:
   S3 Versioning Support
   ruby-git - for S3 Versioning (http://doc.s3.amazonaws.com/betadesign/Versioning.html)
 
+  Ajax Upload Progress
+  mongrel_upload_progress for nice ajax upload status for large files
+
 Run:
   bin/parkplace
 

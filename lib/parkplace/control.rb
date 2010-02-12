@@ -319,7 +319,9 @@ module ParkPlace::Controllers
 
     class CProgress < R '/control/progress/(.+)'
         def get(upid)
-            Mongrel::Uploads.instance.check(upid).inspect
+            params = Mongrel::Uploads.check(upid)
+	    return "UploadProgress.update(#{params[:size]},#{params[:received]});" unless params.nil?
+            "UploadProgress.finish()"
         end
     end
 
@@ -369,7 +371,7 @@ module ParkPlace::Views
             head do
                 title { "Park Place Control Center &raquo; " + str }
                 script :language => 'javascript', :src => '/control/s/js/jquery.js'
-                # script :language => 'javascript', :src => R(CStatic, 'js/support.js')
+                script :language => 'javascript', :src => '/control/s/js/upload_status.js' if $PARKPLACE_PROGRESS
                 style "@import '/control/s/css/control.css';", :type => 'text/css'
             end
             body do
@@ -519,8 +521,13 @@ module ParkPlace::Views
                 end
             end
         end
-        h3 "Upload a File"
-        form :action => "?upload_id=#{Time.now.to_f}", :method => 'post', :enctype => 'multipart/form-data', :class => 'create' do
+        div :id => "results"
+        div(:id => "progress-bar", :style => "display:none")
+        iframe(:id => "upload", :name => "upload", :style => "display:none")
+        @upid = Time.now.to_f
+        form({ :action => "?upload_id=#{@upid}", :id => "upload-form", :method => 'post', :enctype => 'multipart/form-data', :class => 'create' }.merge(
+		$PARKPLACE_PROGRESS ? { :onsubmit => "UploadProgress.monitor('#{@upid}')", :target => "upload" } : {} )) do
+            h3 "Upload a File"
             div.required do
                 input :name => 'upfile', :type => 'file'
             end

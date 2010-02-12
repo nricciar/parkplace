@@ -132,9 +132,14 @@ module ParkPlace
         def serve(host, port)
             require 'mongrel'
             require 'mongrel/camping'
-            if $PARKPLACE_PROGRESS
-              require_gem 'mongrel_upload_progress'
+            begin
+              require 'gem_plugin'
+              gem 'mongrel_upload_progress'
               GemPlugin::Manager.instance.load "mongrel" => GemPlugin::INCLUDE
+              require 'patch_upload_progress'
+              $PARKPLACE_PROGRESS = true
+            rescue LoadError
+              puts "-- file upload progress disabled, install mongrel_upload_progress"
             end
 
             config = Mongrel::Configurator.new( :host => host, :pid_file => File.join(ParkPlace.options.log_dir, "parkplace.#{port}.pid")) do
@@ -145,11 +150,12 @@ module ParkPlace
 
                 listener :port => port do
                     uri "/", :handler => Mongrel::Camping::CampingHandler.new(ParkPlace)
+                    if $PARKPLACE_PROGRESS
+                      uri "/", :handler => plugin('/handlers/upload', { :path_info => '\/control\/buckets\/(.+)' }), :in_front => true
+                    end
+
                     if $PARKPLACE_ACCESSORIES
                       uri "/backup", :handler => BackupHandler.new
-                    end
-                    if $PARKPLACE_PROGRESS
-                      uri "/control/buckets", :handler => plugin('/handlers/upload')
                     end
                     uri "/favicon", :handler => Mongrel::Error404Handler.new("")
                     trap("INT") { stop }
