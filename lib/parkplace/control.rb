@@ -370,7 +370,7 @@ module ParkPlace::Views
         html do
             head do
                 title { "Park Place Control Center &raquo; " + str }
-                script :language => 'javascript', :src => '/control/s/js/jquery.js'
+                script :language => 'javascript', :src => '/control/s/js/prototype.js'
                 script :language => 'javascript', :src => '/control/s/js/upload_status.js' if $PARKPLACE_PROGRESS
                 style "@import '/control/s/css/control.css';", :type => 'text/css'
             end
@@ -496,10 +496,15 @@ module ParkPlace::Views
                 @files.each do |file|
                     tr do
                         th do
-                            a file.name, :href => "javascript://", :onclick => "$('#details-#{file.id}').toggle()"
-                            div.details :id => "details-#{file.id}" do
+                            a file.name, :href => "javascript://", :onclick => "$('details-#{file.id}').toggle()"
+                            div.details :id => "details-#{file.id}", :style => "display:none" do
                                 p "Revision: #{file.git_object.objectish}" if @bucket.versioning_enabled?
                                 p "Last modified on #{file.updated_at}"
+                                if file.obj.mime_type =~ /audio/
+object(:classid => "clsid:D27CDB6E-AE6D-11cf-96B8-444553540000", :codebase => "http://download.macromedia.com/pub/shockwave/cabs/flash/swflash.cab#version=6,0,0,0", :width => "165", :height => "38", :id => "nifty-player-#{file.id}") do
+'<params name="movie" value="/control/s/media/niftyplayer.swf?file=' + R(CFile, @bucket.name, file.name) + '"><params name="bgcolor" value="#ffffff" /><embed src="/control/s/media/niftyplayer.swf?file=' + R(CFile, @bucket.name, file.name) + '" quality=high bgcolor=#FFFFFF width="165" height="38" name="niftyPlayer1" align="" type="application/x-shockwave-flash" pluginspage="http://www.macromedia.com/go/getflashplayer"></embed>'
+end
+                                end
                                 p do
                                     info = [a("Get", :target => "_blank", :href => R(CFile, @bucket.name, file.name))]
                                     info += [a("Changes", :onclick => "window.open(this.href,'changelog','height=600,width=500');return false;", :href => R(CFileChanges,@bucket.name,file.name))] if @bucket.versioning_enabled?

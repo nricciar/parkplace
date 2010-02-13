@@ -1,4 +1,3 @@
-document.write('<script type="text/javascript" src="/control/s/js/prototype.js"></script>')
 var UploadProgress = {
   uploading: null,
   monitor: function(upid) {
@@ -89,11 +88,10 @@ Number.prototype.gigabytes = function() { return this * (1024).megabytes(); };
 Number.prototype.terabytes = function() { return this * (1024).gigabytes(); };
 Number.prototype.petabytes = function() { return this * (1024).terabytes(); };
 Number.prototype.exabytes =  function() { return this * (1024).petabytes(); };
-window.onload = function () {
 ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte', 'petabyte', 'exabyte'].each(function(meth) {
   Number.prototype[meth] = Number.prototype[meth+'s'];
 });
-}
+
 Number.prototype.toPrecision = function() {
   var precision = arguments[0] || 2;
   var s         = Math.round(this * Math.pow(10, precision)).toString();

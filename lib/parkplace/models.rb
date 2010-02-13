@@ -1,3 +1,5 @@
+require 'net/http'
+
 module ParkPlace::Models
 
     class FileInfo
@@ -58,7 +60,7 @@ module ParkPlace::Models
               g.commit_all("Enabling versioning for bucket #{self.name}.")
             end
           rescue Git::GitExecuteError => error_message
-            puts "GIT: #{error_message}"
+            puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
           end
         end
 
@@ -210,6 +212,59 @@ module ParkPlace::Models
                 self.obj.md5
             else
                %{"#{MD5.md5(self.obj)}"}
+            end
+        end
+        def check_origin_for_updates!
+            readlen = 0
+            md5 = MD5.new
+            file_changed = false
+
+            begin
+              uri = URI.parse(self.meta['origin'])
+              http = Net::HTTP.new(uri.host,uri.port)
+              timeout(2) do
+                http.request_get(uri.request_uri, { 'If-Modified-Since' => self.updated_at.httpdate, 'If-None-Match' => self.obj.etag }) do |response|
+                  case response.code.to_i
+                  when 404
+                    self.destroy
+                    raise NoSuchKey
+                  when 200
+                    File.open(self.fullpath,'r+') do |f|
+                      f.pos = 0
+                      response.read_body do |segment|
+                        md5 << segment
+                        readlen += segment.size
+                        f.write(segment)
+                      end
+                      f.truncate(f.pos)
+                    end
+                    file_changed = self.obj.etag == '"' + md5.hexdigest + '"' ? false : true
+                  end
+                end
+              end
+            rescue TimeoutError
+              puts "[#{Time.now}] check_origin: Timed Out. Using latest copy" if ParkPlace.options.verbose
+            rescue => err
+              puts "[#{Time.now}] check_origin: #{err}. Using latest copy" if ParkPlace.options.verbose
+            end
+
+            if file_changed
+              puts "[#{Time.now}] check_origin: New content from origin.  Updating local copy." if ParkPlace.options.verbose
+              info = self.obj
+              info.size = readlen
+              info.md5 = Base64.encode64(md5.digest).strip
+              info.etag = '"' + md5.hexdigest + '"'
+              self.obj = info
+              self.save()
+
+              if self.versioning_enabled?
+                begin
+                  self.git_repository.add(File.basename(self.obj.path))
+                  tmp = self.git_repository.commit("Added #{self.name} to the Git repository.")
+                rescue Git::GitExecuteError => error_message
+                  puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
+                end
+              end
             end
         end
     end

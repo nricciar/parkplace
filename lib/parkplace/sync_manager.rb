@@ -64,13 +64,13 @@ module ParkPlace
       if File.exists?(file_path)
         check = MD5.md5(File.read(file_path)).hexdigest
         return if check == obj.obj.md5
-        puts "[#{Time.now}] File exists, but checksum does not match. Downloading again..."
+        puts "[#{Time.now}] File exists, but checksum does not match. Downloading again..." if ParkPlace.options.verbose
       end
       @pool.process {
         get_file("/backup/#{obj.id}",nil,file_path) do |data|
           open(file_path,"wb") { |f| f.write(data) } unless data.nil?
         end
-        puts "[#{Time.now}] File #{file_path} downloaded."
+        puts "[#{Time.now}] File #{file_path} downloaded." if ParkPlace.options.verbose
       }
     end
 
@@ -112,7 +112,7 @@ module ParkPlace
               file_path = File.join(STORAGE_PATH, r.attributes['obj'].path)
               dir = File.dirname(file_path)
               unless File.exists?(dir)
-                puts "[#{Time.now}] Creating directory #{dir}"
+                puts "[#{Time.now}] Creating directory #{dir}" if ParkPlace.options.verbose
                 FileUtils.mkdir_p dir
               end
               unless tmp.type != 'Slot' || tmp.obj.nil?
@@ -120,7 +120,7 @@ module ParkPlace
                   old_file_path = File.join(STORAGE_PATH, tmp.obj.path)
                   File.move(old_file_path,file_path) if File.exists?(old_file_path) && r.attributes['obj'].path != tmp.obj.path
                 else
-                  puts "[#{Time.now}] File has changed removing stale files"
+                  puts "[#{Time.now}] File has changed removing stale files" if ParkPlace.options.verbose
                   old_file_path = File.join(STORAGE_PATH, tmp.obj.path)
                   File.unlink(old_file_path) if File.exists?(old_file_path)
                 end
@@ -130,7 +130,7 @@ module ParkPlace
               file_path = File.join(STORAGE_PATH, tmp.obj.path)
               if File.exists?(file_path)
                 File.unlink(file_path)
-                puts "[#{Time.now}] Removed deleted file #{file_path}"
+                puts "[#{Time.now}] Removed deleted file #{file_path}" if ParkPlace.options.verbose
               end
             end
             tmp.obj = r.attributes['obj']
@@ -164,7 +164,7 @@ module ParkPlace
               false
             end
           end
-          puts "[#{Time.now}] " + (tmp.deleted == 1 ? "Deleted" : (tmp.new_record? ? "Created" : "Updated")) + " #{tmp.class}/#{tmp.id}"
+          puts "[#{Time.now}] " + (tmp.deleted == 1 ? "Deleted" : (tmp.new_record? ? "Created" : "Updated")) + " #{tmp.class}/#{tmp.id}" if ParkPlace.options.verbose
           tmp.save(false)
           class << tmp
             def record_timestamps

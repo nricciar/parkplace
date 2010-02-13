@@ -17,6 +17,7 @@ module ParkPlace
               @revision_file = @revision.gtree().blobs[File.basename(@slot.obj.path)]
             else
               @slot = bucket.find_slot(oid)
+              @slot.check_origin_for_updates! if $PARKPLACE_ACCESSORIES && @slot.meta['origin']
 
               # check to see if versioning is enabled then display 
               # version information if needed

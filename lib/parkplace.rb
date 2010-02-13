@@ -179,7 +179,7 @@ module ParkPlace
                 while true do
                   sync_manager.run
                   sleep 5
-                  puts "[#{Time.now}] polling..."
+                  puts "[#{Time.now}] sync_manager: polling..." if ParkPlace.options.verbose
                 end
             end
             config.join
