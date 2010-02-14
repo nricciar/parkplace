@@ -22,7 +22,7 @@ begin
   GemPlugin::Manager.instance.load "mongrel" => GemPlugin::INCLUDE
   require 'parkplace/upload_progress'
   Rack::Handler.register 'mongrel', 'Rack::Handler::MongrelUploadProgress'
-  $PARKPLACE_PROGRESS = true
+  Rack::Handler.register 'mongrel_no_upload_progress', 'Rack::Handler::Mongrel'
 rescue LoadError
   puts "-- Unable to load mongrel_upload_progress, no fancy upload progress."
 end
@@ -183,28 +183,35 @@ module ParkPlace
           at_exit { ::File.delete(options.pid_file) if ::File.exist?(options.pid_file) }
         end
 
-        def rack_app
-          create
-          app = Rack::Builder.new {
-            use Rack::Lock
-            use Rack::Head
-            use Rack::ShowExceptions
-            use Rack::CommonLogger
+        # mostly taken from Rack::Handler but we override the default
+        # mongrel handler if mongrel_upload_progress is installed and
+        # Rack::Handler.default messes that up
+        def server
+          # return handler specified by options
+          return Rack::Handler.get(options.server) unless options.server.nil?
 
-            map "/" do
-              run ParkPlace
+          # Guess.
+          if ENV.include?("PHP_FCGI_CHILDREN")
+            # We already speak FastCGI
+            options.delete :File
+            options.delete :Port
+ 
+            Rack::Handler::FastCGI
+          elsif ENV.include?("REQUEST_METHOD")
+            Rack::Handler::CGI
+          else
+            begin
+              # Lookup the correct handler for mongrel instead of
+              # assuming it's Rack::Handler::Mongrel
+              Rack::Handler.get('mongrel')
+            rescue LoadError => e
+              Rack::Handler::WEBrick
             end
-            map "/control/s/" do
-              run Rack::File.new(ParkPlace::STATIC_PATH)
-            end
-            map "/backup" do
-              run ParkPlace::BackupManager.new
-            end
-          }.to_app
+          end
         end
 
         def serve(host, port)
-          app = rack_app
+          app, config = Rack::Builder.parse_file(options.rack_config.nil? ? "config.ru" : options.rack_config)
           File.open(File.join( ParkPlace.options.parkplace_dir, 'last-valid.yaml' ), 'w') { |f| f.write(YAML::dump(ParkPlace.options)) }
 
           # start our connection with the server if we are running
@@ -226,7 +233,7 @@ module ParkPlace
           daemonize if ParkPlace.options.daemon
           write_pid if ParkPlace.options.pid_file
 
-          Rack::Handler.get(ParkPlace.options.server).run app, :Port => port, :Host => host
+          ParkPlace.server.run app, :Port => port, :Host => host
         end
     end
 end

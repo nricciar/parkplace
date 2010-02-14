@@ -26,6 +26,7 @@ module Rack
   module Handler
     class MongrelUploadProgress < ::Mongrel::HttpHandler
       def self.run(app, options={})
+        $PARKPLACE_PROGRESS = true
         server = ::Mongrel::HttpServer.new(
           options[:Host] || '0.0.0.0',
           options[:Port] || 8080,

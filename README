@@ -46,6 +46,7 @@ custom pid file location by supplying the -P option.
 === Common options:
 
     -s, --server SERVER              serve using SERVER (defaults to 'mongrel')
+        --rackup FILE                specify rack config location (defaults to 'config.ru')
     -d, --directory DIRECTORY        Park Place directory (defaults to ~/.parkplace)
         --[no-]x-sendfile            X-Sendfile support (default enabled)
     -D, --daemonize                  run daemonized in the background

@@ -11,8 +11,10 @@ require 'parkplace'
 options = ParkPlace.options
 options.host = "127.0.0.1"
 options.port = 3002
-options.server = "mongrel"
 options.pid_file = "parkplace.pid"
+
+# Need access to @handlers from Rack::Handler
+module Rack::Handler; def self.handlers; @handlers.invert; end; end
 
 opts = OptionParser.new do |opts|
     opts.banner = "Usage: parkplace [options] [host] [port]"
@@ -21,8 +23,12 @@ opts = OptionParser.new do |opts|
     opts.separator ""
     opts.separator "Common options:"
 
-    opts.on("-s", "--server SERVER", "serve using SERVER (defaults to '#{options.server}')") do |s|
+    opts.on("-s", "--server SERVER", "serve using SERVER (defaults to '#{Rack::Handler.handlers[ParkPlace.server.to_s]}')") do |s|
         options.server = s
+    end
+
+    opts.on("--rackup FILE", "specify rack config location (defaults to 'config.ru')") do |ru|
+        options.rack_config = ru
     end
 
     opts.on("-d", "--directory DIRECTORY",
@@ -93,5 +99,6 @@ opts.parse! ARGV
 options.host = ARGV[0] if ARGV[0]
 options.port = ARGV[1].to_i if ARGV[1]
 
-ParkPlace.config(options)
-ParkPlace.serve(ParkPlace.options.host,ParkPlace.options.port)
+#ParkPlace.config(options)
+ParkPlace.options = options
+ParkPlace.serve(options.host,options.port)
