@@ -141,7 +141,6 @@ module ParkPlace
         end
 
         def call(env)
-          env['rack.multithread'] = true
           env["PATH_INFO"] ||= ""
           env["SCRIPT_NAME"] ||= ""
           env["HTTP_CONTENT_LENGTH"] ||= env["CONTENT_LENGTH"]
@@ -184,7 +183,7 @@ module ParkPlace
           at_exit { ::File.delete(options.pid_file) if ::File.exist?(options.pid_file) }
         end
 
-        def serve(host, port)
+        def rack_app
           create
           app = Rack::Builder.new {
             use Rack::Lock
@@ -201,7 +200,11 @@ module ParkPlace
             map "/backup" do
               run ParkPlace::BackupManager.new
             end
-          }
+          }.to_app
+        end
+
+        def serve(host, port)
+          app = rack_app
           File.open(File.join( ParkPlace.options.parkplace_dir, 'last-valid.yaml' ), 'w') { |f| f.write(YAML::dump(ParkPlace.options)) }
 
           # start our connection with the server if we are running
@@ -220,8 +223,6 @@ module ParkPlace
              }
           end
 
-          return app if options.server == 'rackup'
-
           daemonize if ParkPlace.options.daemon
           write_pid if ParkPlace.options.pid_file
 
@@ -229,3 +230,5 @@ module ParkPlace
         end
     end
 end
+
+include ParkPlace
