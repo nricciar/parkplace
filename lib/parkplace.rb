@@ -5,27 +5,28 @@ require 'digest/sha1'
 require 'base64'
 require 'time'
 require 'md5'
+require 'rack'
 
 require 'active_record/acts/nested_set'
 ActiveRecord::Base.send :include, ActiveRecord::Acts::NestedSet
 
 Camping.goes :ParkPlace
 
-# Hack for ParkPlace behind a proxy
-module ParkPlace::Base
-    def URL c='/',*a
-      c = R(c, *a) if c.respond_to? :urls
-      c = self/c
-      hhost = @env.HTTP_X_FORWARDED_HOST.nil? ? @env.HTTP_HOST : @env.HTTP_X_FORWARDED_HOST.to_s
-      c = "//"+hhost+c if c[/^\//]
-      URI(c)
-    end
-end
-
 require 'parkplace/errors'
 require 'parkplace/helpers'
 require 'parkplace/models'
 require 'parkplace/controllers'
+begin
+  require 'gem_plugin'
+  gem 'mongrel_upload_progress'
+  GemPlugin::Manager.instance.load "mongrel" => GemPlugin::INCLUDE
+  require 'parkplace/upload_progress'
+  Rack::Handler.register 'mongrel', 'Rack::Handler::MongrelUploadProgress'
+  $PARKPLACE_PROGRESS = true
+rescue LoadError
+  puts "-- Unable to load mongrel_upload_progress, no fancy upload progress."
+end
+
 if $PARKPLACE_ACCESSORIES
   require 'parkplace/sync_manager'
   require 'parkplace/backup_manager'
@@ -72,11 +73,18 @@ module ParkPlace
     WRITABLE_BY_AUTH = 0020
 
     class << self
+
         def create
             v = 0.0
             v = 1.0 if Models::Bucket.table_exists?
             Camping::Models::Session.create_schema
             Models.create_schema :assume => v
+            puts "** No users found, creating the `admin' user." if v == 0.0
+            admin = Models::User.find_by_login 'admin'
+            if admin && admin.password == hmac_sha1( Models::SetupParkPlace::DEFAULT_PASSWORD, admin.secret )
+              puts "** Please login in with `admin' and password `#{Models::SetupParkPlace::DEFAULT_PASSWORD}'"
+              puts "** You should change the default password for the admin at soonest chance!"
+            end
         end
         def default_options
             require 'ostruct'
@@ -128,61 +136,96 @@ module ParkPlace
                 end
             end
             ParkPlace::STORAGE_PATH.replace options.storage_dir
+            Models::Base.establish_connection(options.database)
+            Models::Base.logger = Logger.new('camping.log') if $DEBUG
         end
+
+        def call(env)
+          env['rack.multithread'] = true
+          env["PATH_INFO"] ||= ""
+          env["SCRIPT_NAME"] ||= ""
+          env["HTTP_CONTENT_LENGTH"] ||= env["CONTENT_LENGTH"]
+          env["HTTP_CONTENT_TYPE"] ||= env["CONTENT_TYPE"]
+          controller = run(env['rack.input'], env)
+          h = controller.headers
+          h.each_pair do |k,v|
+            if v.kind_of? URI
+              h[k] = v.to_s
+            end
+          end
+
+          # mongrel gets upset over headers with nil values
+          controller.headers.delete_if { |x,y| y.nil? }
+
+          if !ParkPlace.options.use_x_sendfile && controller.headers.include?('X-Sendfile') && File.exists?(controller.headers['X-Sendfile'])
+            return [200,controller.headers,File.read(controller.headers.delete('X-Sendfile'))]
+          end
+
+          [controller.status, controller.headers, ["#{controller.body}"]]
+        end
+
+        def daemonize
+          if RUBY_VERSION < "1.9"
+            exit if fork
+            Process.setsid
+            exit if fork
+            Dir.chdir "/"
+            ::File.umask 0000
+            STDIN.reopen "/dev/null"
+            STDOUT.reopen "/dev/null", "a"
+            STDERR.reopen "/dev/null", "a"
+          else
+            Process.daemon
+          end
+        end
+
+        def write_pid
+          ::File.open(options.pid_file, 'w'){ |f| f.write("#{Process.pid}") }
+          at_exit { ::File.delete(options.pid_file) if ::File.exist?(options.pid_file) }
+        end
+
         def serve(host, port)
-            require 'mongrel'
-            require 'mongrel/camping'
-            begin
-              require 'gem_plugin'
-              gem 'mongrel_upload_progress'
-              GemPlugin::Manager.instance.load "mongrel" => GemPlugin::INCLUDE
-              require 'patch_upload_progress'
-              $PARKPLACE_PROGRESS = true
-            rescue LoadError
-              puts "-- file upload progress disabled, install mongrel_upload_progress"
+          create
+          app = Rack::Builder.new {
+            use Rack::Lock
+            use Rack::Head
+            use Rack::ShowExceptions
+            use Rack::CommonLogger
+
+            map "/" do
+              run ParkPlace
             end
-
-            config = Mongrel::Configurator.new( :host => host, :pid_file => File.join(ParkPlace.options.log_dir, "parkplace.#{port}.pid")) do
-                if ParkPlace.options.daemon
-                  write_pid_file
-                  daemonize(:cwd => Dir.pwd, :log_file => File.join(ParkPlace.options.log_dir, "server.log"))
-                end
-
-                listener :port => port do
-                    uri "/", :handler => Mongrel::Camping::CampingHandler.new(ParkPlace)
-                    if $PARKPLACE_PROGRESS
-                      uri "/", :handler => plugin('/handlers/upload', { :path_info => '\/control\/buckets\/(.+)' }), :in_front => true
-                    end
-
-                    if $PARKPLACE_ACCESSORIES
-                      uri "/backup", :handler => BackupHandler.new
-                    end
-                    uri "/favicon", :handler => Mongrel::Error404Handler.new("")
-                    trap("INT") { stop }
-                    run
-                end
+            map "/control/s/" do
+              run Rack::File.new(ParkPlace::STATIC_PATH)
             end
-
-            # save current configuration to last-valid.yaml
-            File.open(File.join( ParkPlace.options.parkplace_dir, 'last-valid.yaml' ), 'w') { |f| f.write(YAML::dump(ParkPlace.options)) }
-            puts "** ParkPlace is running at http://#{host}:#{port}/"
-            puts "** Visit http://#{host}:#{port}/control/ for the control center."
-            puts "** Use CTRL+C to stop" unless ParkPlace.options.daemon
-
-            # start our connection with the server if we are running
-            # as a slave
-            if $PARKPLACE_ACCESSORIES && ParkPlace.options.replication
-                trap("INT") { exit }
-                sync_manager = SyncManager.new({ :server => ParkPlace.options.replication[:host],
-			:username => ParkPlace.options.replication[:username], :secret_key => ParkPlace.options.replication[:secret_key] })
-
-                while true do
-                  sync_manager.run
-                  sleep 5
-                  puts "[#{Time.now}] sync_manager: polling..." if ParkPlace.options.verbose
-                end
+            map "/backup" do
+              run ParkPlace::BackupManager.new
             end
-            config.join
+          }
+          File.open(File.join( ParkPlace.options.parkplace_dir, 'last-valid.yaml' ), 'w') { |f| f.write(YAML::dump(ParkPlace.options)) }
+
+          # start our connection with the server if we are running
+          # as a slave
+          if $PARKPLACE_ACCESSORIES && ParkPlace.options.replication
+             trap("INT") { exit }
+             sync_manager = SyncManager.new({ :server => ParkPlace.options.replication[:host],
+               :username => ParkPlace.options.replication[:username], :secret_key => ParkPlace.options.replication[:secret_key] })
+
+             Thread.new {
+               while true do
+                 sync_manager.run
+                 sleep 5
+                 puts "[#{Time.now}] sync_manager: polling..." if ParkPlace.options.verbose
+               end
+             }
+          end
+
+          return app if options.server == 'rackup'
+
+          daemonize if ParkPlace.options.daemon
+          write_pid if ParkPlace.options.pid_file
+
+          Rack::Handler.get(ParkPlace.options.server).run app, :Port => port, :Host => host
         end
     end
 end

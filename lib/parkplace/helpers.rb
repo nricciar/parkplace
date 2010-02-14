@@ -105,6 +105,7 @@ module ParkPlace::S3
         @amz.sort.each do |k, v|
             canonical[-1,0] = "x-amz-#{k}:#{v}"
         end
+
         @user = ParkPlace::Models::User.find_by_key key_s
         if @user and secret_s != hmac_sha1(@user.secret, canonical.map{|v|v.to_s.strip} * "\n") || @user.deleted == 1
             raise BadAuthentication

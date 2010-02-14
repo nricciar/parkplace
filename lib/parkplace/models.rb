@@ -279,6 +279,9 @@ module ParkPlace::Models
     end
 
     class SetupParkPlace < V 1.0
+        DEFAULT_PASSWORD = 'pass@word1'
+        DEFAULT_SECRET = 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV'
+
         def self.up
             create_table :parkplace_bits do |t|
                 t.column :id,        :integer,  :null => false
@@ -309,6 +312,10 @@ module ParkPlace::Models
                 t.column :superuser,      :integer, :default => 0
                 t.column :deleted,        :integer, :default => 0
             end
+            User.create :login => "admin", :password => DEFAULT_PASSWORD,
+              :email => "admin@parkplace.net", :key => "44CF9590006BF252F707", :secret => DEFAULT_SECRET,
+              :activated_at => Time.now, :superuser => 1
+
             create_table :parkplace_bits_users do |t|
                 t.column :bit_id,  :integer
                 t.column :user_id, :integer

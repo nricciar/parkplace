@@ -195,8 +195,12 @@ module ParkPlace::Controllers
             end
 
             if slot.versioning_enabled?
-              slot.git_repository.add(File.basename(fileinfo.path))
-              slot.git_repository.commit("Added #{slot.name} to the Git repository.")
+              begin
+                slot.git_repository.add(File.basename(fileinfo.path))
+                slot.git_repository.commit("Added #{slot.name} to the Git repository.")
+              rescue => err
+                puts "[#{Time.now}] GIT: #{err}" if ParkPlace.options.verbose
+              end
             end
 
             redirect CFiles, bucket_name

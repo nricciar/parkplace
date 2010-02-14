@@ -1,38 +1,62 @@
 #!/usr/bin/env ruby
 $:.unshift "./lib"
-require 'optparse'
 $PARKPLACE_ACCESSORIES = true
+require 'optparse'
 require 'rubygems'
-gem 'mongrel'
 gem 'activesupport', '~> 2.3.0'
 gem 'activerecord',  '~> 2.3.0'
 
 require 'parkplace'
 
-DEFAULT_PASSWORD = 'pass@word1'
-DEFAULT_SECRET = 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV'
-
-#
-
 options = ParkPlace.options
 options.host = "127.0.0.1"
 options.port = 3002
+options.server = "mongrel"
+options.pid_file = "parkplace.pid"
 
 opts = OptionParser.new do |opts|
     opts.banner = "Usage: parkplace [options] [host] [port]"
     opts.separator "Default host is #{options.host}, default port is #{options.port}."
 
     opts.separator ""
-    opts.separator "Specific options:"
+    opts.separator "Common options:"
+
+    opts.on("-s", "--server SERVER", "serve using SERVER (defaults to '#{options.server}')") do |s|
+        options.server = s
+    end
 
     opts.on("-d", "--directory DIRECTORY",
             "Park Place directory (defaults to #{options.parkplace_dir || 'None'})") do |d|
         options.parkplace_dir = d
     end
 
-    opts.on("-D", "--daemon",  "Daemon mode (run in background)") do |d|
+    opts.on("--[no-]x-sendfile", "X-Sendfile support (default enabled)") do |ns|
+        options.use_x_sendfile = ns
+    end
+
+    opts.on("-D", "--daemonize",  "run daemonized in the background") do |d|
         options.daemon = true
     end
+
+    opts.on("-P", "--pid FILE", "file to store PID (default: #{options.pid_file})") do |f|
+        options.pid_file = f
+    end
+
+    opts.on("-v", "--verbose", "Run verbosely") do |v|
+        options.verbose = v
+    end
+
+    opts.on("-u", "--debug", "Debug Mode") do |v|
+        begin
+          require 'ruby-debug'
+          Debugger.start
+        rescue LoadError
+        end
+        $DEBUG = v
+    end
+
+    opts.separator ""
+    opts.separator "Slave replication options:"
 
     opts.on("-r", "--replicate HOSTNAME", "Mirror master server") do |s|
         options.replication = { }
@@ -50,25 +74,8 @@ opts = OptionParser.new do |opts|
         options.replication[:username] ||= k
     end
 
-    opts.on("-v", "--verbose", "Run verbosely") do |v|
-        options.verbose = v
-    end
-
-    opts.on("-u", "--debug", "Debug Mode") do |v|
-        begin
-          require 'ruby-debug'
-          Debugger.start
-        rescue LoadError
-        end
-        $DEBUG = v
-    end
-
-    opts.on("-s", "--strict", "S3 API ONLY (No added ParkPlace features)") do |v|
-        $PARKPLACE_ACCESSORIES = false
-    end
-
     opts.separator ""
-    opts.separator "Common options:"
+    opts.separator "Specific options:"
 
     opts.on_tail("-h", "--help", "Show this message") do
       puts opts
@@ -88,23 +95,4 @@ options.port = ARGV[1].to_i if ARGV[1]
 ParkPlace.config(options)
 
 include ParkPlace
-
-ParkPlace::Models::Base.establish_connection(options.database)
-ParkPlace::Models::Base.logger = Logger.new('camping.log') if $DEBUG
-ParkPlace.create
-
-num_users = ParkPlace::Models::User.count
-if num_users == 0
-    puts "** No users found, creating the `admin' user."
-    ParkPlace::Models::User.create :login => "admin", :password => DEFAULT_PASSWORD,
-        :email => "admin@parkplace.net", :key => "44CF9590006BF252F707", :secret => DEFAULT_SECRET,
-        :activated_at => Time.now, :superuser => 1
-end
-
-admin = ParkPlace::Models::User.find_by_login "admin"
-if num_users == 1 and admin and admin.password == hmac_sha1( DEFAULT_PASSWORD, admin.secret )
-    puts "** Please login in with `admin' and password `#{DEFAULT_PASSWORD}'"
-    puts "** You should change the default password for the admin at soonest chance!"
-end
-
-ParkPlace.serve(options.host, options.port)
+ParkPlace.serve(ParkPlace.options.host,ParkPlace.options.port)

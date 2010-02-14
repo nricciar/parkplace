@@ -148,6 +148,7 @@ module ParkPlace::Controllers
         def put(bucket_name, oid)
             bucket = Bucket.find_root bucket_name
             only_can_write bucket
+
             raise MissingContentLength unless @env.HTTP_CONTENT_LENGTH
 
             if @env.HTTP_X_AMZ_COPY_SOURCE.to_s =~ /\/(.+?)\/(.+)/
@@ -242,7 +243,7 @@ module ParkPlace::Controllers
               end
             end
 
-            r(200, '', 'ETag' => slot.etag, 'Content-Length' => 0)
+            r(200, '', 'ETag' => slot.etag, 'Content-Length' => 0.to_s)
         end
         def delete(bucket_name, oid)
             bucket = Bucket.find_root bucket_name

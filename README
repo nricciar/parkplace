@@ -1,40 +1,65 @@
-ParkPlace with added support for acls, versioning, and replication.
+= ParkPlace, An Amazon S3 Clone
 
-Required:
-  gem install camping mongrel --include-dependancies
-  gem install sendfile
+== Getting Started, Install Checklist
 
-Optional:
-  Metadata
-  exifr    - used to extract metadata for jpeg images
+  1) Do you have Camping and Rack installed?
 
-  Master/Slave Replication
-  rfuzz    - replacement for net/http
-  curb     - replacement for net/http
+    gem install camping rack --include-dependancies
 
-  S3 Versioning Support
-  ruby-git - for S3 Versioning (http://doc.s3.amazonaws.com/betadesign/Versioning.html)
+  2) You need a webserver, any will do (mongrel, webrick, thin, etc)
 
-  Ajax Upload Progress
-  mongrel_upload_progress for nice ajax upload status for large files
+    gem install mongrel
 
-Run:
-  bin/parkplace
+  3) Do you have SQLite3 installed?  (If you don't want to mess with the
+     database driver.)
 
-Specific options:
+    gem install sqlite3-ruby
+
+  4) For additional functionality you can install some optional gems.
+
+    Metadata
+    exifr    - used to extract metadata for jpeg images
+
+    Master/Slave Replication
+    rfuzz    - replacement for net/http
+    curb     - replacement for net/http
+
+    S3 Versioning Support
+    ruby-git - for S3 Versioning (http://doc.s3.amazonaws.com/betadesign/Versioning.html)
+
+    Ajax Upload Progress
+    mongrel_upload_progress for nice ajax upload status for large files
+
+== Quick Start
+
+Now that you have everything installed to run Park Place it's time to get your server up
+and running.  You can use any web server that rack supports by supplying the -s option at
+startup.  By default Park Place will attempt to use mongrel.
+
+  bin/parkplace -s mongrel 127.0.0.1 3002
+
+To run Park Park Place in the background simply use the -D startup option.  You can set a
+custom pid file location by supplying the -P option.
+
+  bin/parkplace -D -P /var/run/parkplace.pid 127.0.0.1 3002
+
+=== Common options:
+
+    -s, --server SERVER              serve using SERVER (defaults to 'mongrel')
     -d, --directory DIRECTORY        Park Place directory (defaults to ~/.parkplace)
-    -D, --daemon                     Daemon mode (run in background)
+        --[no-]x-sendfile            X-Sendfile support (default enabled)
+    -D, --daemonize                  run daemonized in the background
+    -P, --pid FILE                   file to store PID (default: parkplace.pid)
+    -v, --verbose                    Run verbosely
+    -u, --debug                      Debug Mode
+
+=== Slave replication options
+
     -r, --replicate HOSTNAME         Mirror master server
         --replicate-secret KEY       secret key for replication
         --replicate-user USERNAME    for authentication (defaults to 'admin')
-    -v, --verbose                    Run verbosely
-    -u, --debug                      Debug Mode
-    -s, --strict                     S3 API ONLY (No added ParkPlace features)
 
-Common options:
+=== Specific options
+
     -h, --help                       Show this message
         --version                    Show version
-
-Park Place will attempt to load its default configuration from config.yaml in the Park 
-Place root directory if the file exists.  See example-config.yaml for more information 
-on options available.

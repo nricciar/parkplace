@@ -49,7 +49,7 @@ module ParkPlace
                 headers['Content-Disposition'] = @slot.obj.disposition
             end
             headers['Content-Type'] ||= 'binary/octet-stream'
-            r(200, '', headers.merge('ETag' => etag, 'Last-Modified' => @slot.updated_at.httpdate, 'Content-Length' => @slot.obj.size))
+            r(200, '', headers.merge('ETag' => etag, 'Last-Modified' => @slot.updated_at.httpdate, 'Content-Length' => @slot.obj.size.to_s))
         end
         def get(bucket_name, oid)
             head(bucket_name, oid)
