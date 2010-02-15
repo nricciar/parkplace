@@ -145,6 +145,7 @@ module ParkPlace
           env["SCRIPT_NAME"] ||= ""
           env["HTTP_CONTENT_LENGTH"] ||= env["CONTENT_LENGTH"]
           env["HTTP_CONTENT_TYPE"] ||= env["CONTENT_TYPE"]
+          env["HTTP_HOST"] = env["HTTP_X_FORWARDED_HOST"] unless env["HTTP_X_FORWARDED_HOST"].nil?
           controller = run(env['rack.input'], env)
           h = controller.headers
           h.each_pair do |k,v|
@@ -168,7 +169,7 @@ module ParkPlace
             exit if fork
             Process.setsid
             exit if fork
-            Dir.chdir "/"
+            Dir.chdir File.expand_path(File.dirname(__FILE__))
             ::File.umask 0000
             STDIN.reopen "/dev/null"
             STDOUT.reopen "/dev/null", "a"
