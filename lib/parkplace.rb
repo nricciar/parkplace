@@ -179,6 +179,15 @@ module ParkPlace
           end
         end
 
+        def write(data)
+          logger.write(data)
+          logger.flush
+        end
+
+        def logger
+          @file ||= File.new(File.join(options.log_dir, "parkplace.log"),'a')
+        end
+
         def write_pid
           ::File.open(options.pid_file, 'w'){ |f| f.write("#{Process.pid}") }
           at_exit { ::File.delete(options.pid_file) if ::File.exist?(options.pid_file) }
