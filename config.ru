@@ -2,7 +2,6 @@ $PARKPLACE_ACCESSORIES = true
 require 'parkplace'
 
 ParkPlace.config(ParkPlace.options)
-use Rack::Lock
 use Rack::Head
 use Rack::ShowExceptions
 use Rack::CommonLogger, ParkPlace

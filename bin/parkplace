@@ -99,6 +99,5 @@ opts.parse! ARGV
 options.host = ARGV[0] if ARGV[0]
 options.port = ARGV[1].to_i if ARGV[1]
 
-#ParkPlace.config(options)
 ParkPlace.options = options
 ParkPlace.serve(options.host,options.port)

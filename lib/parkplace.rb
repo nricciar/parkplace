@@ -138,6 +138,7 @@ module ParkPlace
             ParkPlace::STORAGE_PATH.replace options.storage_dir
             Models::Base.establish_connection(options.database)
             Models::Base.logger = Logger.new('camping.log') if $DEBUG
+            create
         end
 
         def call(env)
