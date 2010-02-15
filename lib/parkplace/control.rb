@@ -260,7 +260,7 @@ module ParkPlace::Controllers
 
       def get
         only_superusers
-        @known_hosts = BackupHandler.known_hosts
+        @known_hosts = BackupManager.known_hosts
         @last_updated = Models::Bit.last_time_updated
         render :control, "Network Status", :known_hosts
       end
