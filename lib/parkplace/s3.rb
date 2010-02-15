@@ -143,6 +143,15 @@ module ParkPlace::Controllers
         end
     end
 
+    class GitRepo < S3 '/(.+?).git/(.+)'
+      def get(bucket_name,oid)
+        @bucket = Bucket.find_root bucket_name
+        unless @bucket.git_repository_path.nil? || !File.exists?(File.join(@bucket.git_repository_path,'.git',oid))
+          return File.open(File.join(@bucket.fullpath,'.git',oid)) { |f| f.read }
+        end
+      end
+    end
+
     class RSlot < S3 '/(.+?)/(.+)'
         include ParkPlace::S3, ParkPlace::SlotGet
         def put(bucket_name, oid)

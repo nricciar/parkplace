@@ -74,6 +74,19 @@ module ParkPlace
       }
     end
 
+    def get_repository(bucket)
+      bucket = Models::Bucket.find_root bucket
+      unless bucket.nil? || bucket.git_repository_path.nil?
+        # see if we have fetched this repository before if not
+        # we need to get a copy otherwise just get the updates
+        unless bucket.versioning_enabled?
+          Git.clone("http://#{self.server}:#{self.port}/#{bucket}.git/", :name => bucket, :path => bucket.git_repository_path)
+        else
+          bucket.git_repository.pull
+        end
+      end
+    end
+
     def run
       @bits = Models::Bit.find_by_sql [%{ SELECT * FROM parkplace_bits ORDER BY updated_at DESC LIMIT 0,1}]
 
