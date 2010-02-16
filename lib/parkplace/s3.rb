@@ -147,6 +147,7 @@ module ParkPlace::Controllers
       def get(bucket_name,oid)
         @bucket = Bucket.find_root bucket_name
         unless @bucket.git_repository_path.nil? || !File.exists?(File.join(@bucket.git_repository_path,'.git',oid))
+          headers['Content-Type'] = "binary/octet-stream"
           return File.open(File.join(@bucket.fullpath,'.git',oid)) { |f| f.read }
         end
       end
@@ -246,6 +247,7 @@ module ParkPlace::Controllers
               begin
                 slot.git_repository.add(File.basename(fileinfo.path))
                 tmp = slot.git_repository.commit("Added #{slot.name} to the Git repository.")
+                slot.git_update
                 headers['x-amz-version-id'] = slot.git_object.objectish
               rescue Git::GitExecuteError => error_message
                 puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
@@ -263,6 +265,7 @@ module ParkPlace::Controllers
               begin
                 slot.git_repository.remove(File.basename(@slot.obj.path))
                 slot.git_repository.commit("Removed #{@slot.name} from the Git repository.")
+                slot.git_update
               rescue Git::GitExecuteError => error_message
                 puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
               end

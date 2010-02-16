@@ -99,9 +99,11 @@ module ParkPlace
             FileUtils.remove_entry_secure(bucket.git_repository_path,true)
           end
           Git.clone("http://#{self.server}:#{self.port}/#{bucket.name}.git", bucket.name, { :path => ParkPlace.options.storage_dir })
+          bucket.git_repository.config
           return true
         else
-          bucket.git_repository.pull()
+          bucket.git_repository.pull
+          bucket.git_repository.merge('origin/master')
           return true
         end
       end
@@ -149,7 +151,7 @@ module ParkPlace
                 if r.attributes['obj'].md5 == tmp.obj.md5
                   old_file_path = File.join(STORAGE_PATH, tmp.obj.path)
                   File.move(old_file_path,file_path) if File.exists?(old_file_path) && r.attributes['obj'].path != tmp.obj.path
-                else
+                elsif !old_file_path.nil? && !File.exists?(File.join(File.dirname(old_file_path),'.git'))
                   puts "[#{Time.now}] File has changed removing stale files" if ParkPlace.options.verbose
                   old_file_path = File.join(STORAGE_PATH, tmp.obj.path)
                   File.unlink(old_file_path) if File.exists?(old_file_path)

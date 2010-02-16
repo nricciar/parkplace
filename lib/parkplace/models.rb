@@ -104,6 +104,20 @@ module ParkPlace::Models
           @@last_time_updated = self.updated_at.to_i
         end
 
+        def git_update
+          # update git info so we can serve it over http
+          base_dir = File.join(self.git_repository_path,'.git')
+          if File.exists?(base_dir)
+            File.open(File.join(base_dir,'HEAD'),'w') { |f| f.write("ref: refs/heads/master") }
+            if File.exists?(File.join(base_dir,'refs/heads/master'))
+              File.open(File.join(base_dir,'info/refs'),'w') { |f| 
+                ref = File.open(File.join(base_dir,'refs/heads/master')) { |re| re.read }
+		f.write("#{ref.chomp}\trefs/heads/master\n") 
+              }
+            end
+          end
+        end
+
         def destroy
           # need to keep the record around for slaves
           if self.type == 'Slot' && File.exists?(self.fullpath)
@@ -191,17 +205,16 @@ module ParkPlace::Models
             g = Git.init(self.fullpath)
             g.config('user.name', self.owner.login)
             g.config('user.email', self.owner.email)
-            # need this so we can get pull over our http server
-            FileUtils.chmod(0755,File.join(self.fullpath,'.git/hooks/post-update'))
-
             # if directory is not empty we need to add the files
             # into version control
             unless dir_empty
               g.add('.')
               g.commit_all("Enabling versioning for bucket #{self.name}.")
+              self.git_update
             end
             self.type = "GitBucket"
             self.save()
+            self.git_update
           rescue Git::GitExecuteError => error_message
             puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
           end
@@ -270,6 +283,7 @@ module ParkPlace::Models
                 begin
                   self.git_repository.add(File.basename(self.obj.path))
                   tmp = self.git_repository.commit("Added #{self.name} to the Git repository.")
+                  self.git_update
                 rescue Git::GitExecuteError => error_message
                   puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
                 end

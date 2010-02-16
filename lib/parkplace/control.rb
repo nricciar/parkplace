@@ -198,6 +198,7 @@ module ParkPlace::Controllers
               begin
                 slot.git_repository.add(File.basename(fileinfo.path))
                 slot.git_repository.commit("Added #{slot.name} to the Git repository.")
+                slot.git_update
               rescue => err
                 puts "[#{Time.now}] GIT: #{err}" if ParkPlace.options.verbose
               end
@@ -248,6 +249,7 @@ module ParkPlace::Controllers
             if slot.versioning_enabled?
               slot.git_repository.remove(File.basename(slot.obj.path))
               slot.git_repository.commit("Removed #{slot.name} from the Git repository.")
+              slot.git_update
             end
 
             slot.destroy
