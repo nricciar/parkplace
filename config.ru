@@ -4,7 +4,7 @@ require 'parkplace'
 ParkPlace.config(ParkPlace.options)
 use Rack::Head
 use Rack::ShowExceptions
-use Rack::CommonLogger, ParkPlace
+use Rack::CommonLogger
 
 map "/" do
   run ParkPlace

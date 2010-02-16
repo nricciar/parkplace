@@ -30,8 +30,7 @@ class BackupManager
         @slot = @slot.first
         file_path = File.join(STORAGE_PATH, @slot.obj.path)
         head['Content-Type'] = @slot.obj.mime_type if @slot.obj.is_a? ParkPlace::Models::FileInfo
-        head['X-Sendfile'] = file_path
-        return [200, head, []]
+        return [200, head, File.open(file_path)]
       end
     else
       @@known_hosts[slave_host.to_s] = {
@@ -44,7 +43,7 @@ class BackupManager
       if env["HTTP_IF_MODIFIED_SINCE"]
         sc = 0
         @bits = []
-        # we will hold the connection open for 60 seconds
+        # we will hold the connection open for 120 seconds
         # polling for any updates if somthing comes up we
         # send it off immedietly and close the connection
         while sc <= 60 && Models::Bit.last_time_updated == env["HTTP_IF_MODIFIED_SINCE"].to_i
@@ -65,10 +64,10 @@ class BackupManager
         @bits += Models::User.find(:all, :order => "updated_at ASC", :limit => 25)
       end
       if @bits.empty?
-        head['Last-Modified'] = Models::Bit.last_time_updated.to_s
+        head['Last-Modified'] = Models::Bit.last_time_updated.to_i.to_s
       else
-        head['Last-Modified'] = @bits.last.updated_at.to_i.to_s
         @bits.sort! { |x,y| x.updated_at <=> y.updated_at }
+        head['Last-Modified'] = @bits.last.updated_at.to_i.to_s
       end
       puts "[#{Time.now}] #{slave_host} requested resource #{env["REQUEST_URI"]}" if ParkPlace.options.verbose
       [200, head, Marshal.dump(@bits)]

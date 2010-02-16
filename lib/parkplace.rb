@@ -123,6 +123,7 @@ module ParkPlace
                 YAML.load_file(conf).marshal_dump.each { |k,v| options.__send__("#{k}=", v) if options.__send__(k).nil? }
             end
             options.storage_dir = File.expand_path(options.storage_dir || 'storage', options.parkplace_dir)
+            FileUtils.mkdir_p options.storage_dir unless File.exists?(options.storage_dir)
             options.log_dir = File.expand_path(options.log_dir || 'log', options.parkplace_dir)
             FileUtils.mkdir_p(options.log_dir) unless File.exists?(options.log_dir)
             options.database ||= {:adapter => 'sqlite3', :database => File.join(options.parkplace_dir, (!options.replication.nil? && 

@@ -22,7 +22,8 @@ module ParkPlace
       self.port = host_check.size == 1 ? 80 : host_check[1].to_i
       self.secret_key = options[:secret_key].nil? ? 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV' : options[:secret_key]
       self.username = options[:username].nil? ? 'admin' : options[:username]
-      @pool = ThreadPool.new(10)
+      @pool = ThreadPool.new(3)
+      @download_list = {}
     end
 
     def auth_header(path,modified=nil)
@@ -60,31 +61,52 @@ module ParkPlace
     end
 
     def download_file_if_needed(obj)
-      file_path = File.join(STORAGE_PATH, obj.obj.path)
-      if File.exists?(file_path)
-        check = MD5.md5(File.read(file_path)).hexdigest
-        return if check == obj.obj.md5
-        puts "[#{Time.now}] File exists, but checksum does not match. Downloading again..." if ParkPlace.options.verbose
-      end
-      @pool.process {
-        get_file("/backup/#{obj.id}",nil,file_path) do |data|
-          open(file_path,"wb") { |f| f.write(data) } unless data.nil?
+      @download_list[obj.id] = { :id => obj.id, :md5 => obj.obj.md5, :file_path => File.join(STORAGE_PATH, obj.obj.path) }
+    end
+
+    def download_needed_files
+      @download_list.each_pair do |obj_id,dl|
+        file_path = dl[:file_path]
+        FileUtils.mkdir_p File.dirname(file_path) unless File.exists?(File.dirname(file_path))
+
+        test = :corrupt if File.exists?(file_path) && MD5.md5(File.read(file_path)).hexdigest != dl[:md5]
+        test = :new unless File.exists?(file_path)
+
+        unless test.nil?
+          @pool.process {
+            get_file("/backup/#{dl[:id]}",nil,file_path) do |data|
+              open(file_path,"wb") { |f| f.write(data) } unless data.nil?
+            end
+            puts "[#{Time.now}] File #{file_path} downloaded." if ParkPlace.options.verbose
+          }
+        else
+          puts "[#{Time.now}] File exists, but checksum does not match. Downloading again..." if ParkPlace.options.verbose && dl == :corrupt
         end
-        puts "[#{Time.now}] File #{file_path} downloaded." if ParkPlace.options.verbose
-      }
+      end
+      @download_list = {}
     end
 
     def get_repository(bucket)
-      bucket = Models::Bucket.find_root bucket
+      puts "[#{Time.now}] fetching git repository #{bucket.name}..."
       unless bucket.nil? || bucket.git_repository_path.nil?
         # see if we have fetched this repository before if not
         # we need to get a copy otherwise just get the updates
-        unless bucket.versioning_enabled?
-          Git.clone("http://#{self.server}:#{self.port}/#{bucket}.git/", :name => bucket, :path => bucket.git_repository_path)
+        unless File.exists?(File.join(bucket.git_repository_path,'.git'))
+          if File.exists?(bucket.git_repository_path)
+            # somewhere along the way someone switched the bucket
+            # to versioned that means we have to trash our data and
+            # get the new versioned data
+            FileUtils.remove_entry_secure(bucket.git_repository_path,true)
+          end
+          Git.clone("http://#{self.server}:#{self.port}/#{bucket.name}.git", bucket.name, { :path => ParkPlace.options.storage_dir })
+          return true
         else
-          bucket.git_repository.pull
+          bucket.git_repository.pull()
+          return true
         end
       end
+    rescue
+      return false
     end
 
     def run
@@ -123,11 +145,6 @@ module ParkPlace
             tmp.type = r.attributes['type']
             if tmp.type == 'Slot' && r.attributes['deleted'].to_i == 0
               file_path = File.join(STORAGE_PATH, r.attributes['obj'].path)
-              dir = File.dirname(file_path)
-              unless File.exists?(dir)
-                puts "[#{Time.now}] Creating directory #{dir}" if ParkPlace.options.verbose
-                FileUtils.mkdir_p dir
-              end
               unless tmp.type != 'Slot' || tmp.obj.nil?
                 if r.attributes['obj'].md5 == tmp.obj.md5
                   old_file_path = File.join(STORAGE_PATH, tmp.obj.path)
@@ -184,10 +201,24 @@ module ParkPlace
               super
             end
           end
-          download_file_if_needed(tmp) if tmp.kind_of?(ParkPlace::Models::Bit) && !tmp.obj.nil? && tmp.deleted == 0
+          if tmp.kind_of?(ParkPlace::Models::Bit)
+            # sync bucket repository if we are versioned
+            ret = get_repository(tmp) if tmp.type == "GitBucket"
+            p = ParkPlace::Models::Bit.find_by_id(tmp.parent_id)
+            ret = get_repository(p) if p.class == ParkPlace::Models::GitBucket
+
+            # not in a versioned bucket download file
+            if !ret && (p.nil? || p.class != ParkPlace::Models::GitBucket)
+              download_file_if_needed(tmp) unless tmp.deleted == 1 || tmp.obj.nil?
+            end
+          end
         end
       end
       @pool.join
+      Thread.new { download_needed_files }
+    rescue => err
+      puts "[#{Time.now}] Sync Manager Error: #{err}"
+      sleep 30
     end
   end
 end

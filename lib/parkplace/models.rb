@@ -40,29 +40,12 @@ module ParkPlace::Models
         acts_as_nested_set
         serialize :meta
         serialize :obj
+        belongs_to :parent
         belongs_to :owner, :class_name => 'User', :foreign_key => 'owner_id'
         has_many :bits_users
         has_and_belongs_to_many :users
         has_one :torrent
         validates_length_of :name, :within => 3..255
-
-        def git_init
-          begin
-            FileUtils.mkdir_p(self.fullpath) unless File.exists?(self.fullpath)
-            dir_empty = !Dir.foreach(self.fullpath) {|n| break true unless /\A\.\.?\z/ =~ n}
-            g = Git.init(self.fullpath)
-            g.config('user.name', self.owner.login)
-            g.config('user.email', self.owner.email)
-            # if directory is not empty we need to add the files
-            # into version control
-            unless dir_empty
-              g.add('.')
-              g.commit_all("Enabling versioning for bucket #{self.name}.")
-            end
-          rescue Git::GitExecuteError => error_message
-            puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
-          end
-        end
 
         def git_repository
           versioning_enabled? ? Git.open(git_repository_path) : nil
@@ -201,6 +184,32 @@ module ParkPlace::Models
         def find_slot(oid)
             Slot.find(:first, :conditions => ['deleted = 0 AND parent_id = ? AND name = ?', self.id, oid]) or raise NoSuchKey
         end
+        def git_init
+          begin
+            FileUtils.mkdir_p(self.fullpath) unless File.exists?(self.fullpath)
+            dir_empty = !Dir.foreach(self.fullpath) {|n| break true unless /\A\.\.?\z/ =~ n}
+            g = Git.init(self.fullpath)
+            g.config('user.name', self.owner.login)
+            g.config('user.email', self.owner.email)
+            # need this so we can get pull over our http server
+            FileUtils.chmod(0755,File.join(self.fullpath,'.git/hooks/post-update'))
+
+            # if directory is not empty we need to add the files
+            # into version control
+            unless dir_empty
+              g.add('.')
+              g.commit_all("Enabling versioning for bucket #{self.name}.")
+            end
+            self.type = "GitBucket"
+            self.save()
+          rescue Git::GitExecuteError => error_message
+            puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
+          end
+        end
+    end
+
+    class GitBucket < Bucket
+
     end
 
     class Slot < Bit
