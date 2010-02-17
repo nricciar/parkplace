@@ -108,6 +108,10 @@ module ParkPlace
 	authenticate_user
       end
 
+      # for the methods that still might need camping
+      def r(status, body, headers)
+	[status,headers,body]
+      end
     end
 
     module Controllers
