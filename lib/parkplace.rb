@@ -148,22 +148,33 @@ module ParkPlace
           env["HTTP_CONTENT_LENGTH"] ||= env["CONTENT_LENGTH"]
           env["HTTP_CONTENT_TYPE"] ||= env["CONTENT_TYPE"]
           env["HTTP_HOST"] = env["HTTP_X_FORWARDED_HOST"] unless env["HTTP_X_FORWARDED_HOST"].nil?
-          controller = run(env['rack.input'], env)
-          h = controller.headers
-          h.each_pair do |k,v|
-            if v.kind_of? URI
-              h[k] = v.to_s
+
+	  if env["REQUEST_PATH"] =~ /^\/((?!control)|(control\/buckets)\/)(.+?)\/(.+)$/
+	    status, headers, body = ParkPlace::S3Slot.new(env).get($3,$4)
+	  else
+            controller = run(env['rack.input'], env)
+            h = controller.headers
+            h.each_pair do |k,v|
+              if v.kind_of? URI
+                h[k] = v.to_s
+              end
             end
+
+            status = controller.status
+	    headers = controller.headers
+	    body = controller.body
+	  end
+	  # mongrel gets upset over headers with nil values
+	  headers.delete_if { |x,y| y.nil? }
+
+          if !ParkPlace.options.use_x_sendfile && headers.include?('X-Sendfile') && File.exists?(headers['X-Sendfile'])
+	    body = File.open(headers.delete('X-Sendfile'))
           end
 
-          # mongrel gets upset over headers with nil values
-          controller.headers.delete_if { |x,y| y.nil? }
-
-          if !ParkPlace.options.use_x_sendfile && controller.headers.include?('X-Sendfile') && File.exists?(controller.headers['X-Sendfile'])
-            return [200,controller.headers,File.read(controller.headers.delete('X-Sendfile'))]
-          end
-
-          [controller.status, controller.headers, ["#{controller.body}"]]
+	  # apparently if we do not call this we will run out
+	  # of database connections
+	  ActiveRecord::Base.verify_active_connections!
+	  [status, headers, body]
         end
 
         def daemonize

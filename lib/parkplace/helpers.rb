@@ -126,6 +126,37 @@ module ParkPlace::S3
         self
     end
 
+    def authenticate_user
+      @meta, @amz = [], []
+      @env.each do |k,v|
+	k = k.downcase.gsub('_', '-')
+	@amz[$1] = v.strip if k =~ /^http-x-amz-([-\w]+)$/
+	@meta[$1] = v if k =~ /^http-x-amz-meta-([-\w]+)$/
+      end
+      if @request.cookies["camping_sid"]
+	session = Camping::Models::Session.find_by_hashid @request.cookies["camping_sid"]
+	@user = Models::User.find(session.ivars["ParkPlace"]["user_id"]) unless session.nil? || session.ivars["ParkPlace"].nil?
+      end
+      if @user.nil? && @env['HTTP_AUTHORIZATION']
+        auth, key_s, secret_s = @env['HTTP_AUTHORIZATION'].to_s.match(/^AWS (\w+):(.+)$/)
+        date_s = @env['HTTP_X_AMZ_DATE'] || @env['HTTP_DATE']
+        if @input.has_key?('Signature') and Time.at(@input['Expires'].to_i) >= Time.now
+          key_s, secret_s, date_s = @input['AWSAccessKeyId'], @input['Signature'], @input['Expires']
+        end
+        uri = @env['PATH_INFO']
+        uri += "?" + @env['QUERY_STRING'] if ParkPlace::RESOURCE_TYPES.include?(@env['QUERY_STRING'])
+        canonical = [@env['REQUEST_METHOD'], @env['HTTP_CONTENT_MD5'], @env['HTTP_CONTENT_TYPE'],
+          date_s, uri]
+        @amz.sort.each do |k, v|
+          canonical[-1,0] = "x-amz-#{k}:#{v}"
+        end
+        @user = ParkPlace::Models::User.find_by_key key_s
+        if (@user and secret_s != hmac_sha1(@user.secret, canonical.map{|v|v.to_s.strip} * "\n")) || (@user and @user.deleted == 1)
+          raise BadAuthentication
+        end
+      end
+    end
+
     def versioning_response_for(bit)
       data = xml do |x|
         x.VersioningConfiguration :xmlns => "http://s3.amazonaws.com/doc/2006-03-01/" do
