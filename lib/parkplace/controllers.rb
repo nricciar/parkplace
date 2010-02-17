@@ -5,16 +5,15 @@ module ParkPlace
         def head(bucket_name, oid)
             bucket = ParkPlace::Models::Bucket.find_root(bucket_name)
             if @input.has_key? 'version-id'
-              @revision = Git::Object.new(bucket.git_repository,@input['version-id'],'commit')
+              @revision = bucket.git_repository.gcommit(@input['version-id'])
               headers['x-amz-version-id'] = @revision.sha
 
               # this is still the most recent record which is wrong
               # this also means that metadata or acls are not saved
               # with their revisions at the moment
               @slot = bucket.find_slot(oid)
-              @slot.updated_at = @revision.date()
 
-              @revision_file = @revision.gtree().blobs[File.basename(@slot.obj.path)]
+              @revision_file = revision.gtree.blobs[File.basename(@slot.fullpath)].contents { |f| f.read }
             else
               @slot = bucket.find_slot(oid)
               @slot.check_origin_for_updates! if $PARKPLACE_ACCESSORIES && !@slot.meta.nil? && @slot.meta['origin']
@@ -47,16 +46,19 @@ module ParkPlace
             if @slot.obj.is_a? ParkPlace::Models::FileInfo
                 headers['Content-Type'] = @slot.obj.mime_type
                 headers['Content-Disposition'] = @slot.obj.disposition
+                headers['Content-Length'] = (@revision_file.nil? ? @slot.obj.size : @revision_file.length).to_s
             end
             headers['Content-Type'] ||= 'binary/octet-stream'
-            r(200, '', headers.merge('ETag' => etag, 'Last-Modified' => @slot.updated_at.httpdate, 'Content-Length' => @slot.obj.size.to_s))
+            headers.merge!('ETag' => etag, 'Last-Modified' => @slot.updated_at.httpdate) if @revision_file.nil?
+
+            r(200, '', headers)
         end
         def get(bucket_name, oid)
             head(bucket_name, oid)
             if @input.has_key? 'acl'
                 acl_response_for(@slot)
             elsif @input.has_key? 'version-id'
-                @revision_file.contents
+                return r(200,@revision_file)
             elsif @input.has_key? 'torrent'
                 torrent @slot
             elsif @slot.obj.kind_of?(ParkPlace::Models::FileInfo) && @env.HTTP_RANGE =~ /^bytes=(\d+)?-(\d+)?$/ # yay, parse basic ranges

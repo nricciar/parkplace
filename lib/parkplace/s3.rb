@@ -145,10 +145,17 @@ module ParkPlace::Controllers
 
     class GitRepo < S3 '/(.+?).git/(.+)'
       def get(bucket_name,oid)
-        @bucket = Bucket.find_root bucket_name
-        unless @bucket.git_repository_path.nil? || !File.exists?(File.join(@bucket.git_repository_path,'.git',oid))
-          headers['Content-Type'] = "binary/octet-stream"
-          return File.open(File.join(@bucket.fullpath,'.git',oid)) { |f| f.read }
+        # if they have authenticated with the backup manager
+        # allow access
+        check_host = env['HTTP_X_FORWARDED_FOR'].nil? ? env['REMOTE_ADDR'] : env['HTTP_X_FORWARDED_FOR']
+        unless ParkPlace::BackupManager.known_hosts.nil? || ParkPlace::BackupManager.known_hosts[check_host].nil?
+          @bucket = Bucket.find_root bucket_name
+          unless @bucket.git_repository_path.nil? || !File.exists?(File.join(@bucket.git_repository_path,'.git',oid))
+            headers['Content-Type'] = "binary/octet-stream"
+            return File.open(File.join(@bucket.fullpath,'.git',oid)) { |f| f.read }
+          end
+        else
+          r(401, 'Access Denied')
         end
       end
     end
