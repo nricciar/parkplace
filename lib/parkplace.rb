@@ -1,58 +1,30 @@
 require 'rubygems'
-require 'camping'
-require 'camping/session'
 require 'digest/sha1'
 require 'base64'
 require 'time'
 require 'md5'
 require 'rack'
 
+require 'active_support'
+require 'active_record'
+
 require 'active_record/acts/nested_set'
 ActiveRecord::Base.send :include, ActiveRecord::Acts::NestedSet
 
-Camping.goes :ParkPlace
-
+#require 'parkplace/addons'
 require 'parkplace/errors'
 require 'parkplace/helpers'
-require 'parkplace/models'
+require 'active_record/acts/nested_set'
+require 'parkplace/bit'
+require 'parkplace/user'
 require 'parkplace/controllers'
-begin
-  require 'gem_plugin'
-  gem 'mongrel_upload_progress'
-  GemPlugin::Manager.instance.load "mongrel" => GemPlugin::INCLUDE
-  require 'parkplace/upload_progress'
-  Rack::Handler.register 'mongrel', 'Rack::Handler::MongrelUploadProgress'
-  Rack::Handler.register 'mongrel_no_upload_progress', 'Rack::Handler::Mongrel'
-rescue LoadError
-  puts "-- Unable to load mongrel_upload_progress, no fancy upload progress."
-end
-
-if $PARKPLACE_ACCESSORIES
-  require 'parkplace/sync_manager'
-  require 'parkplace/backup_manager'
-  require 'parkplace/control'
-  begin
-    require 'exifr'
-    puts "-- EXIFR found, JPEG metadata enabled."
-  rescue LoadError
-    puts "-- EXIFR not found, JPEG metadata disabled."
-  end
-end
-begin
-    require "git"
-    puts "-- Git support found, versioning support enabled."
-rescue LoadError
-    puts "-- Git support not found, versioning support disabled."
-end
-begin
-    require 'parkplace/torrent'
-    puts "-- RubyTorrent found, torrent support is turned on."
-    puts "-- TORRENT SUPPORT IS EXTREMELY EXPERIMENTAL -- WHAT I MEAN IS: IT PROBABLY DOESN'T WORK."
-rescue LoadError
-    puts "-- No RubyTorrent found, torrent support disbled."
-end
-
+require 'parkplace/sync_manager'
+require 'parkplace/backup_manager'
+#require 'parkplace/control'
 require 'parkplace/s3'
+
+DEFAULT_PASSWORD = 'pass@word1'
+DEFAULT_SECRET = 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV'
 
 module ParkPlace
     VERSION = "0.7"
@@ -72,12 +44,12 @@ module ParkPlace
     READABLE_BY_AUTH = 0040
     WRITABLE_BY_AUTH = 0020
 
-    class << self
+    class Base
 
-        def create
+        def self.create
+return
             v = 0.0
             v = 1.0 if Models::Bucket.table_exists?
-            Camping::Models::Session.create_schema
             Models.create_schema :assume => v
             puts "** No users found, creating the `admin' user." if v == 0.0
             admin = Models::User.find_by_login 'admin'
@@ -86,7 +58,8 @@ module ParkPlace
               puts "** You should change the default password for the admin at soonest chance!"
             end
         end
-        def default_options
+
+        def self.default_options
             require 'ostruct'
             options = OpenStruct.new
             if options.parkplace_dir.nil?
@@ -104,15 +77,15 @@ module ParkPlace
             options
         end
 
-        def options
+        def self.options
           @options ||= default_options
         end
 
-        def options=(val)
+        def self.options=(val)
           @options = val
         end
 
-        def config(options)
+        def self.config(options)
             require 'ftools'
             require 'yaml'
             abort "** No home directory found, please say the directory when you run #$O." unless options.parkplace_dir
@@ -137,47 +110,109 @@ module ParkPlace
                 end
             end
             ParkPlace::STORAGE_PATH.replace options.storage_dir
-            Models::Base.establish_connection(options.database)
-            Models::Base.logger = Logger.new('camping.log') if $DEBUG
+            ActiveRecord::Base.table_name_prefix = 'parkplace_'
+            ActiveRecord::Base.establish_connection(options.database)
+            ActiveRecord::Base.logger = Logger.new('debug.log') if $DEBUG
             create
         end
 
-        def call(env)
+        def self.add_url(path)
+        
+        end
+
+        def self.call(env)
+          # apparently if we do not call this we will run out
+          # of database connections
+          ActiveRecord::Base.verify_active_connections!
+
           env["PATH_INFO"] ||= ""
           env["SCRIPT_NAME"] ||= ""
           env["HTTP_CONTENT_LENGTH"] ||= env["CONTENT_LENGTH"]
           env["HTTP_CONTENT_TYPE"] ||= env["CONTENT_TYPE"]
           env["HTTP_HOST"] = env["HTTP_X_FORWARDED_HOST"] unless env["HTTP_X_FORWARDED_HOST"].nil?
 
-	  if env["REQUEST_PATH"] =~ /^\/((?!control)|(control\/buckets)\/)(.+?)\/(.+)$/
-	    status, headers, body = ParkPlace::S3Slot.new(env).get($3,$4)
-	  else
-            controller = run(env['rack.input'], env)
-            h = controller.headers
-            h.each_pair do |k,v|
-              if v.kind_of? URI
-                h[k] = v.to_s
-              end
-            end
+          code = nil
+          status = 200
+          headers = {}
+          body = []
 
-            status = controller.status
-	    headers = controller.headers
-	    body = controller.body
-	  end
+          @request = Rack::Request.new(env)
+          ParkPlace::Controllers.r.each do |route|
+            begin
+              route.urls.each do |url|
+                if env["REQUEST_PATH"] =~ /^#{url}\/?$/ 
+                  request = route.new
+                  if env["HTTP_AUTHORIZATION"]
+                    meta,amz,user = authenticate_user(@request)
+                    request.extend(ParkPlace::S3)
+                    request.instance_variable_set(:@user, user)
+                    request.instance_variable_set(:@meta, meta)
+                    request.instance_variable_set(:@amz, amz)
+                  end
+                  request.instance_variable_set(:@env, env)
+                  request.instance_variable_set(:@input, @request.params)
+                  call = (env["REQUEST_METHOD"] || "GET").downcase
+                  status, headers, body = request.send(*([call] + $~.captures)) if request.respond_to? call
+                end
+              end
+            rescue ParkPlace::ServiceError => e
+              code = e.code
+              status = e.status
+              body = e.message
+              break unless e.status == 404
+            end
+          end
+
 	  # mongrel gets upset over headers with nil values
 	  headers.delete_if { |x,y| y.nil? }
 
-          if !ParkPlace.options.use_x_sendfile && headers.include?('X-Sendfile') && File.exists?(headers['X-Sendfile'])
+          if !options.use_x_sendfile && headers.include?('X-Sendfile') && File.exists?(headers['X-Sendfile'])
 	    body = File.open(headers.delete('X-Sendfile'))
           end
 
-	  # apparently if we do not call this we will run out
-	  # of database connections
-	  ActiveRecord::Base.verify_active_connections!
-	  [status, headers, body]
+          unless env["HTTP_AUTHORIZATION"] && status >= 400 && code
+  	    [status, headers, body]
+          else
+            xml status do |x|
+              x.Error do
+                x.Code code
+                x.Message body
+                x.Resource env['PATH_INFO']
+                x.RequestId Time.now.to_i
+              end
+            end
+          end
         end
 
-        def daemonize
+    def self.authenticate_user(request)
+      env = request.env
+      meta, amz = {}, {}
+      env.each do |k,v|
+        k = k.downcase.gsub('_', '-')
+        amz[$1] = v.strip if k =~ /^http-x-amz-([-\w]+)$/
+        meta[$1] = v if k =~ /^http-x-amz-meta-([-\w]+)$/
+      end
+        auth, key_s, secret_s = *env['HTTP_AUTHORIZATION'].to_s.match(/^AWS (\w+):(.+)$/)
+        date_s = env['HTTP_X_AMZ_DATE'] || env['HTTP_DATE']
+        if request.params.has_key?('Signature') and Time.at(request['Expires'].to_i) >= Time.now
+          key_s, secret_s, date_s = request['AWSAccessKeyId'], request['Signature'], request['Expires']
+        end
+        uri = env['PATH_INFO']
+        uri += "?" + env['QUERY_STRING'] if ParkPlace::RESOURCE_TYPES.include?(env['QUERY_STRING'])
+        canonical = [env['REQUEST_METHOD'], env['HTTP_CONTENT_MD5'], env['HTTP_CONTENT_TYPE'],
+          date_s, uri]
+        amz.sort.each do |k, v|
+          canonical[-1,0] = "x-amz-#{k}:#{v}"
+        end
+        user = ParkPlace::Models::User.find_by_key key_s
+
+        if (user and secret_s != hmac_sha1(user.secret, canonical.map{|v|v.to_s.strip} * "\n")) || (user and user.deleted == 1)
+          raise BadAuthentication
+        end
+      [meta,amz,user]
+    end
+
+        def self.daemonize
           if RUBY_VERSION < "1.9"
             exit if fork
             Process.setsid
@@ -192,16 +227,16 @@ module ParkPlace
           end
         end
 
-        def write(data)
+        def self.write(data)
           logger.write(data)
           logger.flush
         end
 
-        def logger
+        def self.logger
           @file ||= File.new(File.join(options.log_dir, "parkplace.log"),'a')
         end
 
-        def write_pid
+        def self.write_pid
           ::File.open(options.pid_file, 'w'){ |f| f.write("#{Process.pid}") }
           at_exit { ::File.delete(options.pid_file) if ::File.exist?(options.pid_file) }
         end
@@ -209,7 +244,7 @@ module ParkPlace
         # mostly taken from Rack::Handler but we override the default
         # mongrel handler if mongrel_upload_progress is installed and
         # Rack::Handler.default messes that up
-        def server
+        def self.server
           # return handler specified by options
           return Rack::Handler.get(options.server) unless options.server.nil?
 
@@ -233,32 +268,34 @@ module ParkPlace
           end
         end
 
-        def serve(host, port)
+        def self.serve(host, port)
           app, config = Rack::Builder.parse_file(options.rack_config.nil? ? "config.ru" : options.rack_config)
-          File.open(File.join( ParkPlace.options.parkplace_dir, 'last-valid.yaml' ), 'w') { |f| f.write(YAML::dump(ParkPlace.options)) }
+          File.open(File.join( options.parkplace_dir, 'last-valid.yaml' ), 'w') { |f| f.write(YAML::dump(options)) }
 
           # start our connection with the server if we are running
           # as a slave
-          if $PARKPLACE_ACCESSORIES && ParkPlace.options.replication
+          if $PARKPLACE_ACCESSORIES && options.replication
              trap("INT") { exit }
-             sync_manager = SyncManager.new({ :server => ParkPlace.options.replication[:host],
-               :username => ParkPlace.options.replication[:username], :secret_key => ParkPlace.options.replication[:secret_key] })
+             sync_manager = SyncManager.new({ :server => options.replication[:host],
+               :username => options.replication[:username], :secret_key => options.replication[:secret_key] })
 
              Thread.new {
                while true do
                  sync_manager.run
                  sleep 5
-                 puts "[#{Time.now}] sync_manager: polling..." if ParkPlace.options.verbose
+                 puts "[#{Time.now}] sync_manager: polling..." if options.verbose
                end
              }
           end
 
-          daemonize if ParkPlace.options.daemon
-          write_pid if ParkPlace.options.pid_file
+          daemonize if options.daemon
+          write_pid if options.pid_file
 
-          ParkPlace.server.run app, :Port => port, :Host => host
+          server.run app, :Port => port, :Host => host
         end
+
     end
+
 end
 
 include ParkPlace

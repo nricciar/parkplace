@@ -1,14 +1,9 @@
 #!/usr/bin/env ruby
 $:.unshift "./lib"
-$PARKPLACE_ACCESSORIES = true
-require 'optparse'
-require 'rubygems'
-gem 'activesupport', '~> 2.3.0'
-gem 'activerecord',  '~> 2.3.0'
-
 require 'parkplace'
+require 'optparse'
 
-options = ParkPlace.options
+options = ParkPlace::Base.options
 options.host = "127.0.0.1"
 options.port = 3002
 options.pid_file = "parkplace.pid"
@@ -23,7 +18,7 @@ opts = OptionParser.new do |opts|
     opts.separator ""
     opts.separator "Common options:"
 
-    opts.on("-s", "--server SERVER", "serve using SERVER (defaults to '#{Rack::Handler.handlers[ParkPlace.server.to_s]}')") do |s|
+    opts.on("-s", "--server SERVER", "serve using SERVER (defaults to '#{Rack::Handler.handlers[ParkPlace::Base.server.to_s]}')") do |s|
         options.server = s
     end
 
@@ -99,5 +94,5 @@ opts.parse! ARGV
 options.host = ARGV[0] if ARGV[0]
 options.port = ARGV[1].to_i if ARGV[1]
 
-ParkPlace.options = options
-ParkPlace.serve(options.host,options.port)
+ParkPlace::Base.options = options
+ParkPlace::Base.serve(options.host,options.port)

@@ -1,3 +1,19 @@
+class Object
+  # The hidden singleton lurks behind everyone
+  def metaclass; class << self; self; end; end
+  def meta_eval &blk; metaclass.instance_eval &blk; end
+
+  # Adds methods to a metaclass
+  def meta_def name, &blk
+    meta_eval { define_method name, &blk }
+  end
+
+  # Defines an instance method within a class
+  def class_def name, &blk
+    class_eval { define_method name, &blk }
+  end
+end
+
 class Time
     def to_default_s
         strftime("%B %d, %Y at %H:%M")
@@ -12,7 +28,7 @@ module ParkPlace
         xml = Builder::XmlMarkup.new
         xml.instruct! :xml, :version=>"1.0", :encoding=>"UTF-8"
         yield xml
-        r(status, xml.target!, 'Content-Type' => 'application/xml')
+        [status,{'Content-Type' => 'application/xml'},xml.target!]
     end
 
     # Convenient method for generating a SHA1 digest.
@@ -73,89 +89,6 @@ module ParkPlace
 end
 
 module ParkPlace::S3
-    # This method overrides Camping's own <tt>service</tt> method.  The idea here is
-    # to set up some common instance vars and check authentication.  Here's the rundown:
-    #
-    # # The <tt>@meta</tt> variable is setup, containing any metadata headers
-    #   (starting with <tt>x-amz-meta-</tt>.)
-    # # Authorization is checked.  If a <tt>Signature</tt> is found in the URL string, it
-    #   is used.  Otherwise, the <tt>Authorization</tt> HTTP header is used.
-    # # If authorization is successful, the <tt>@user</tt> variable contains a valid User
-    #   object.  If not, <tt>@user</tt> is nil.
-    #
-    # If a ParkPlace exception is thrown (anything derived from ParkPlace::ServiceError),
-    # the exception is displayed as XML.
-    def service(*a)
-        @meta, @amz = ParkPlace::H[], ParkPlace::H[]
-        @env.each do |k, v|
-            k = k.downcase.gsub('_', '-')
-            @amz[$1] = v.strip if k =~ /^http-x-amz-([-\w]+)$/
-            @meta[$1] = v if k =~ /^http-x-amz-meta-([-\w]+)$/
-        end
-
-        auth, key_s, secret_s = *@env.HTTP_AUTHORIZATION.to_s.match(/^AWS (\w+):(.+)$/)
-        date_s = @env.HTTP_X_AMZ_DATE || @env.HTTP_DATE
-        if @input.Signature and Time.at(@input.Expires.to_i) >= Time.now
-            key_s, secret_s, date_s = @input.AWSAccessKeyId, @input.Signature, @input.Expires
-        end
-        uri = @env.PATH_INFO
-        uri += "?" + @env.QUERY_STRING if ParkPlace::RESOURCE_TYPES.include?(@env.QUERY_STRING)
-        canonical = [@env.REQUEST_METHOD, @env.HTTP_CONTENT_MD5, @env.HTTP_CONTENT_TYPE, 
-            date_s, uri]
-        @amz.sort.each do |k, v|
-            canonical[-1,0] = "x-amz-#{k}:#{v}"
-        end
-
-        @user = ParkPlace::Models::User.find_by_key key_s
-        if @user and secret_s != hmac_sha1(@user.secret, canonical.map{|v|v.to_s.strip} * "\n") || @user.deleted == 1
-            raise BadAuthentication
-        end
-
-        s = super(*a)
-        s.headers['Server'] = 'ParkPlace'
-        s
-    rescue ParkPlace::ServiceError => e
-        xml e.status do |x|
-            x.Error do
-                x.Code e.code
-                x.Message e.message
-                x.Resource @env.PATH_INFO
-                x.RequestId Time.now.to_i
-            end
-        end
-        self
-    end
-
-    def authenticate_user
-      @meta, @amz = [], []
-      @env.each do |k,v|
-	k = k.downcase.gsub('_', '-')
-	@amz[$1] = v.strip if k =~ /^http-x-amz-([-\w]+)$/
-	@meta[$1] = v if k =~ /^http-x-amz-meta-([-\w]+)$/
-      end
-      if @request.cookies["camping_sid"]
-	session = Camping::Models::Session.find_by_hashid @request.cookies["camping_sid"]
-	@user = Models::User.find(session.ivars["ParkPlace"]["user_id"]) unless session.nil? || session.ivars["ParkPlace"].nil?
-      end
-      if @user.nil? && @env['HTTP_AUTHORIZATION']
-        auth, key_s, secret_s = @env['HTTP_AUTHORIZATION'].to_s.match(/^AWS (\w+):(.+)$/)
-        date_s = @env['HTTP_X_AMZ_DATE'] || @env['HTTP_DATE']
-        if @input.has_key?('Signature') and Time.at(@input['Expires'].to_i) >= Time.now
-          key_s, secret_s, date_s = @input['AWSAccessKeyId'], @input['Signature'], @input['Expires']
-        end
-        uri = @env['PATH_INFO']
-        uri += "?" + @env['QUERY_STRING'] if ParkPlace::RESOURCE_TYPES.include?(@env['QUERY_STRING'])
-        canonical = [@env['REQUEST_METHOD'], @env['HTTP_CONTENT_MD5'], @env['HTTP_CONTENT_TYPE'],
-          date_s, uri]
-        @amz.sort.each do |k, v|
-          canonical[-1,0] = "x-amz-#{k}:#{v}"
-        end
-        @user = ParkPlace::Models::User.find_by_key key_s
-        if (@user and secret_s != hmac_sha1(@user.secret, canonical.map{|v|v.to_s.strip} * "\n")) || (@user and @user.deleted == 1)
-          raise BadAuthentication
-        end
-      end
-    end
 
     def versioning_response_for(bit)
       data = xml do |x|
@@ -189,7 +122,6 @@ module ParkPlace::S3
           end
         end
       end
-      return data
     end
 
     # Parse any ACL requests which have come in.
