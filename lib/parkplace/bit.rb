@@ -2,6 +2,15 @@ require 'net/http'
 
 module ParkPlace::Models
 
+      class Torrent < ActiveRecord::Base
+	      belongs_to :bit
+	            has_many :torrent_peers
+		        end
+
+          class TorrentPeer < ActiveRecord::Base
+	          belongs_to :torrent
+		      end
+
   class Bit < ActiveRecord::Base
 
     acts_as_nested_set

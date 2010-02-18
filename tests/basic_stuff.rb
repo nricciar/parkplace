@@ -27,6 +27,12 @@ puts "adding metadata"
 object.metadata[:test] = 'hello world'
 object.store(:access => :public_read)
 
+grant = AWS::S3::ACL::Grant.new
+grant.grantee = AWS::S3::ACL::Grantee.new('uri' => 'http://acs.amazonaws.com/groups/global/AuthenticatedUsers')
+grant.permission = 'READ_ACP'
+object.acl.grants << grant
+object.acl(object.acl)
+
 AWS::S3::S3Object.rename test_file, 'renamed_file.jpg', bucket_name
 print "renaming file... "
 

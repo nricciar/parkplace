@@ -2,9 +2,9 @@
 
 == Getting Started, Install Checklist
 
-  1) Do you have Camping and Rack installed?
+  1) Do you have Rack and Markaby installed?
 
-    gem install camping rack --include-dependancies
+    gem install rack markaby --include-dependancies
 
   2) You need a webserver, any will do (mongrel, webrick, thin, etc)
 

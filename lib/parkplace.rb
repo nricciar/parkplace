@@ -1,6 +1,7 @@
 require 'rubygems'
 require 'digest/sha1'
 require 'base64'
+require 'openssl'
 require 'time'
 require 'md5'
 require 'rack'
@@ -11,7 +12,7 @@ require 'active_record'
 require 'active_record/acts/nested_set'
 ActiveRecord::Base.send :include, ActiveRecord::Acts::NestedSet
 
-#require 'parkplace/addons'
+require 'parkplace/addons'
 require 'parkplace/errors'
 require 'parkplace/helpers'
 require 'active_record/acts/nested_set'
@@ -20,8 +21,8 @@ require 'parkplace/user'
 require 'parkplace/controllers'
 require 'parkplace/sync_manager'
 require 'parkplace/backup_manager'
-#require 'parkplace/control'
 require 'parkplace/s3'
+require 'parkplace/control'
 
 DEFAULT_PASSWORD = 'pass@word1'
 DEFAULT_SECRET = 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV'
@@ -116,6 +117,8 @@ module ParkPlace
       create
     end
 
+    def self.escape(s); s.to_s.gsub(/[^ \w.-]+/n){'%'+($&.unpack('H2'*$&.size)*'%').upcase}.tr(' ', '+') end
+
     def self.call(env)
       # apparently if we do not call this we will run out
       # of database connections
@@ -133,22 +136,31 @@ module ParkPlace
       body = []
 
       @request = Rack::Request.new(env)
+      cookie_data = nil
+
       ParkPlace::Controllers.r.each do |route|
         begin
           route.urls.each do |url|
             if env["REQUEST_PATH"] =~ /^#{url}\/?$/ 
               request = route.new
-              if env["HTTP_AUTHORIZATION"]
-                meta,amz,user = authenticate_user(@request)
-                request.extend(ParkPlace::S3)
+	      request.instance_variable_set(:@env, env)
+	      request.instance_variable_set(:@input, @request.params)
+
+              if env["HTTP_AUTHORIZATION"] || env["REQUEST_PATH"][0,8] == "/control"
+		request.extend(ParkPlace::S3)
+                meta,amz,user,state = authenticate_user(@request)
+		return redirect("ParkPlace::Controllers::CLogin") if user.nil? && env["REQUEST_PATH"] != "/control/login"
                 request.instance_variable_set(:@user, user)
+		request.instance_variable_set(:@state, state)
                 request.instance_variable_set(:@meta, meta)
                 request.instance_variable_set(:@amz, amz)
               end
-              request.instance_variable_set(:@env, env)
-              request.instance_variable_set(:@input, @request.params)
+
               call = (env["REQUEST_METHOD"] || "GET").downcase
               status, headers, body = request.send(*([call] + $~.captures)) if request.respond_to? call
+	      state = request.instance_eval { @state }
+	      cookie_data = Base64.encode64(Marshal.dump(state)) unless state.nil?
+	      headers['Set-Cookie'] = "parkplace=" if state && state.user_id.nil?
             end
           end
         rescue ParkPlace::ServiceError => e
@@ -167,7 +179,9 @@ module ParkPlace
       end
 
       unless env["HTTP_AUTHORIZATION"] && status >= 400 && code
-        [status, headers, body]
+	headers["Set-Cookie"] = "parkplace=" + escape("#{OpenSSL::HMAC.hexdigest(OpenSSL::Digest::SHA1.new,
+	  options.secret, cookie_data)}--#{cookie_data}") unless cookie_data.nil?
+	[status, headers, body]
       else
         xml status do |x|
           x.Error do
@@ -180,6 +194,13 @@ module ParkPlace
       end
     end
 
+    def self.redirect(c, *url)
+      ParkPlace::Controllers.r.each do |route|
+        return [301, { 'Location' => (url.empty? ? route.urls.first : route.urls.find{|x|x.scan(/\(.+?\)/).size==url.size}.dup.gsub!(
+	  /\(.+?\)/) { |m| url.pop }) }, []] if route.to_s == c.to_s
+      end
+    end
+
     def self.authenticate_user(request)
       env = request.env
       meta, amz = {}, {}
@@ -188,6 +209,14 @@ module ParkPlace
         amz[$1] = v.strip if k =~ /^http-x-amz-([-\w]+)$/
         meta[$1] = v if k =~ /^http-x-amz-meta-([-\w]+)$/
       end
+      if request.cookies["parkplace"]
+	checkdata,data = request.cookies["parkplace"].split("--")
+        if OpenSSL::HMAC.hexdigest(OpenSSL::Digest::SHA1.new, options.secret, data) == checkdata
+	  data = Marshal.load(Base64.decode64(data))
+	  return [meta,amz,Models::User.find_by_id(data.user_id),data]
+	end
+      end
+
       auth, key_s, secret_s = *env['HTTP_AUTHORIZATION'].to_s.match(/^AWS (\w+):(.+)$/)
       date_s = env['HTTP_X_AMZ_DATE'] || env['HTTP_DATE']
       if request.params.has_key?('Signature') and Time.at(request['Expires'].to_i) >= Time.now

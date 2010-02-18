@@ -199,7 +199,7 @@ module ParkPlace::Controllers
         fileinfo.path.succ! while File.exists?(File.join(STORAGE_PATH, fileinfo.path))
         file_path = File.join(STORAGE_PATH,fileinfo.path)
       else
-        temp_path = @in.path rescue nil
+        temp_path = @env['rack.input'][:path] rescue nil
         readlen = 0
         md5 = MD5.new
 
@@ -209,7 +209,7 @@ module ParkPlace::Controllers
           while part = @env['rack.input'].read(BUFSIZE)
             readlen += part.size
             md5 << part
-            tmpf << part unless @in.is_a?(Tempfile)
+            tmpf << part unless @env['rack.input'].is_a?(Tempfile)
           end
         end
 
@@ -239,7 +239,7 @@ module ParkPlace::Controllers
 
       mdata = {}
       if defined?(EXIFR) && fileinfo.mime_type =~ /jpg|jpeg/
-        photo_data = EXIFR::JPEG.new(file_path.nil? ? temp_path : file_path).to_hash
+        photo_data = EXIFR::JPEG.new(temp_path).to_hash
         photo_data.each_pair do |key,value|
           tmp = key.to_s.gsub(/[^a-z0-9]+/i, '-').downcase.gsub(/-$/,'')
           mdata[tmp] = value.to_s
@@ -248,7 +248,7 @@ module ParkPlace::Controllers
       end
 
       slot = nil
-      meta = @meta.empty? ? nil : {}.merge(@meta)
+      meta = @meta.nil? || @meta.empty? ? nil : {}.merge(@meta)
       owner_id = @user ? @user.id : bucket.owner_id
 
       begin

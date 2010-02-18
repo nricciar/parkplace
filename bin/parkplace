@@ -4,6 +4,8 @@ require 'parkplace'
 require 'optparse'
 
 options = ParkPlace::Base.options
+# secret key for sessions
+options.secret = "9e107d9d372bb6826bd81d3542a419d6"
 options.host = "127.0.0.1"
 options.port = 3002
 options.pid_file = "parkplace.pid"
