@@ -9,9 +9,6 @@ use Rack::CommonLogger
 map "/" do
   run ParkPlace::Base
 end
-map "/control/s/" do
-  run Rack::File.new(ParkPlace::STATIC_PATH)
-end
 map "/backup" do
   run ParkPlace::BackupManager.new
 end
