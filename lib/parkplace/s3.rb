@@ -26,6 +26,8 @@ module ParkPlace::Controllers
 
   class RBucket < S3 '/([^\/]+)/?'
 
+    include ParkPlace::S3
+
     def put(bucket_name)
       only_authorized
       bucket = Models::Bucket.find_root(bucket_name)

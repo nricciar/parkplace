@@ -88,44 +88,6 @@ module ParkPlace
       end
     end
 
-    class CreateTorrents < ActiveRecord::Migration
-
-      def self.up
-        create_table :parkplace_torrents do |t|
-          t.column :id,        :integer,  :null => false
-          t.column :bit_id,    :integer
-          t.column :info_hash, :string,   :limit => 40
-          t.column :metainfo,  :binary
-          t.column :seeders,   :integer,  :null => false, :default => 0
-          t.column :leechers,  :integer,  :null => false, :default => 0
-          t.column :hits,      :integer,  :null => false, :default => 0
-          t.column :total,     :integer,  :null => false, :default => 0
-          t.column :updated_at, :timestamp
-        end
-        create_table :parkplace_torrent_peers do |t|
-          t.column :id,         :integer,  :null => false
-          t.column :torrent_id, :integer
-          t.column :guid,       :string,   :limit => 40
-          t.column :ipaddr,     :string
-          t.column :port,       :integer
-          t.column :uploaded,   :integer,  :null => false, :default => 0
-          t.column :downloaded, :integer,  :null => false, :default => 0
-          t.column :remaining,  :integer,  :null => false, :default => 0
-          t.column :compact,    :integer,  :null => false, :default => 0
-          t.column :event,      :integer,  :null => false, :default => 0
-          t.column :key,        :string,   :limit => 55
-          t.column :created_at, :timestamp
-          t.column :updated_at, :timestamp
-        end
-      end
-
-      def self.down
-        drop_table :parkplace_torrents
-        rop_table :parkplace_torrent_peers
-      end
-
-    end
-
   end
 
   TRACKER_INTERVAL = 10.minutes

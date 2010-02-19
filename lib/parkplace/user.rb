@@ -60,31 +60,4 @@ module ParkPlace::Models
 
   end
 
-  class CreateUsers < ActiveRecord::Migration
-
-    def self.up
-      create_table :parkplace_users do |t|
-	t.column :id,             :integer,  :null => false
-	t.column :login,          :string,   :limit => 40
-	t.column :password,       :string,   :limit => 40
-	t.column :email,          :string,   :limit => 64
-	t.column :key,            :string,   :limit => 64
-	t.column :secret,         :string,   :limit => 64
-	t.column :created_at,     :datetime
-	t.column :updated_at,     :timestamp
-	t.column :activated_at,   :datetime
-	t.column :superuser,      :integer, :default => 0
-	t.column :deleted,        :integer, :default => 0
-      end
-      User.create :login => "admin", :password => DEFAULT_PASSWORD,
-	:email => "admin@parkplace.net", :key => "44CF9590006BF252F707", :secret => DEFAULT_SECRET,
-	:activated_at => Time.now, :superuser => 1
-    end
-
-    def self.down
-      drop_table :parkplace_users
-    end
-
-  end
-
 end

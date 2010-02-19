@@ -67,7 +67,7 @@ module ParkPlace::UserSession
     if @state.user_id
       @user = ParkPlace::Models::User.find @state.user_id
     end
-    return ParkPlace::Base.redirect Controllers::CLogin if @user.nil?
+    return ParkPlace::Base.redirect(Controllers::CLogin) if @user.nil?
   end
 
 end
@@ -286,4 +286,43 @@ module ParkPlace::S3
     end
   end
 
+end
+
+module ParkPlace::Models
+
+  class SchemaInfo < ActiveRecord::Base
+    set_table_name "schema_info"
+  end
+
+  def self.V(n)
+    @final = [n, @final.to_i].max
+    m = (@migrations ||= [])
+    Class.new(ActiveRecord::Migration) do
+      meta_def(:version) { n }
+      meta_def(:inherited) { |k| m << k }
+    end
+  end
+
+  def self.create_schema(opts = {})
+    opts[:assume] ||= 0
+    opts[:version] ||= @final
+    if @migrations
+      unless SchemaInfo.table_exists?
+        ActiveRecord::Schema.define do
+          create_table :schema_info do |t|
+            t.column :version, :float
+          end
+        end
+      end
+
+      si = SchemaInfo.find(:first) || SchemaInfo.new(:version => opts[:assume])
+      if si.version < opts[:version]
+        @migrations.each do |k|
+          k.migrate(:up) if si.version < k.version and k.version <= opts[:version]
+          k.migrate(:down) if si.version > k.version and k.version > opts[:version]
+        end
+        si.update_attributes(:version => opts[:version])
+      end
+    end
+  end
 end

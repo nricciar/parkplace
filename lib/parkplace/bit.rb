@@ -13,6 +13,8 @@ module ParkPlace::Models
 
   class Bit < ActiveRecord::Base
 
+set_table_name "parkplace_bits"
+
     acts_as_nested_set
 
     serialize :meta
@@ -293,41 +295,6 @@ module ParkPlace::Models
   class BitsUser < ActiveRecord::Base
     belongs_to :bit
     belongs_to :user
-  end
-
-  class CreateUsers < ActiveRecord::Migration
-
-    def self.up
-      create_table :parkplace_bits do |t|
-        t.column :id,        :integer,  :null => false
-        t.column :owner_id,  :integer
-        t.column :parent_id, :integer
-        t.column :lft,       :integer
-        t.column :rgt,       :integer
-        t.column :type,      :string,   :limit => 6
-        t.column :name,      :string,   :limit => 255
-        t.column :created_at, :timestamp
-        t.column :updated_at, :timestamp
-        t.column :access,    :integer
-        t.column :meta,      :text
-        t.column :obj,       :text
-        t.column :deleted,   :integer, :default => 0
-      end
-      add_index :parkplace_bits, :name
-
-      create_table :parkplace_bits_users do |t|
-        t.column :bit_id,  :integer
-        t.column :user_id, :integer
-        t.column :access,  :integer
-      end
-
-    end
-
-    def self.down
-      drop_table :parkplace_bits
-      drop_table :parkplace_bits_users
-    end
-
   end
 
 end

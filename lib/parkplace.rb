@@ -16,13 +16,15 @@ require 'parkplace/addons'
 require 'parkplace/errors'
 require 'parkplace/helpers'
 require 'active_record/acts/nested_set'
+require 'parkplace/models'
 require 'parkplace/bit'
 require 'parkplace/user'
 require 'parkplace/controllers'
-require 'parkplace/sync_manager'
-require 'parkplace/backup_manager'
 require 'parkplace/control'
 require 'parkplace/s3'
+
+require 'parkplace/sync_manager'
+require 'parkplace/backup_manager'
 
 DEFAULT_PASSWORD = 'pass@word1'
 DEFAULT_SECRET = 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV'
@@ -48,14 +50,22 @@ module ParkPlace
   class Base
 
     def self.create
-      return
       v = 0.0
-      v = 1.0 if Models::Bucket.table_exists?
+      v = 1.0 if Models::Bit.table_exists?
       Models.create_schema :assume => v
-      puts "** No users found, creating the `admin' user." if v == 0.0
+      ActiveRecord::Base.table_name_prefix = 'parkplace_'
+
+      num_users = Models::User.count || 0
+      if num_users == 0
+        puts "** No users found, creating the `admin' user."
+        Models::User.create :login => "admin", :password => DEFAULT_PASSWORD,
+          :email => "admin@parkplace.net", :key => "44CF9590006BF252F707", :secret => DEFAULT_SECRET,
+          :activated_at => Time.now, :superuser => 1
+      end
+
       admin = Models::User.find_by_login 'admin'
-      if admin && admin.password == hmac_sha1( Models::SetupParkPlace::DEFAULT_PASSWORD, admin.secret )
-        puts "** Please login in with `admin' and password `#{Models::SetupParkPlace::DEFAULT_PASSWORD}'"
+      if admin && admin.password == hmac_sha1( DEFAULT_PASSWORD, admin.secret )
+        puts "** Please login in with `admin' and password `#{DEFAULT_PASSWORD}'"
         puts "** You should change the default password for the admin at soonest chance!"
       end
     end
@@ -111,7 +121,6 @@ module ParkPlace
         end
       end
       ParkPlace::STORAGE_PATH.replace options.storage_dir
-      ActiveRecord::Base.table_name_prefix = 'parkplace_'
       ActiveRecord::Base.establish_connection(options.database)
       ActiveRecord::Base.logger = Logger.new('debug.log') if $DEBUG
       create
