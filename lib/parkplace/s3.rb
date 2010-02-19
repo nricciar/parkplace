@@ -270,7 +270,7 @@ module ParkPlace::Controllers
           slot.git_update
           headers['x-amz-version-id'] = slot.git_object.objectish
         rescue Git::GitExecuteError => error_message
-          puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
+          puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace::Base.options.verbose
         end
       end
 
@@ -283,11 +283,11 @@ module ParkPlace::Controllers
 
       if @slot.versioning_enabled?
         begin
-          slot.git_repository.remove(File.basename(@slot.obj.path))
-          slot.git_repository.commit("Removed #{@slot.name} from the Git repository.")
-          slot.git_update
+          @slot.git_repository.remove(File.basename(@slot.obj.path))
+          @slot.git_repository.commit("Removed #{@slot.name} from the Git repository.")
+          @slot.git_update
         rescue Git::GitExecuteError => error_message
-          puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
+          puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace::Base.options.verbose
         end
       end
 
