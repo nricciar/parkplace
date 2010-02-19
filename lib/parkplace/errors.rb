@@ -11,6 +11,14 @@
 #
 module ParkPlace
 
+    class Redirect < Exception
+      attr_accessor :headers
+      def initialize(loc,head=nil)
+        self.headers = { 'Location' => loc }
+        self.headers.merge!(head) unless head.nil?
+      end
+    end
+
     # All errors are derived from ServiceError.  It's never actually raised itself, though.
     class ServiceError < Exception; end
 

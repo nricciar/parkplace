@@ -21,8 +21,8 @@ require 'parkplace/user'
 require 'parkplace/controllers'
 require 'parkplace/sync_manager'
 require 'parkplace/backup_manager'
-require 'parkplace/s3'
 require 'parkplace/control'
+require 'parkplace/s3'
 
 DEFAULT_PASSWORD = 'pass@word1'
 DEFAULT_SECRET = 'OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV'
@@ -136,33 +136,22 @@ module ParkPlace
       body = []
 
       @request = Rack::Request.new(env)
+      call = (env["REQUEST_METHOD"] || "GET").downcase
       cookie_data = nil
 
       ParkPlace::Controllers.r.each do |route|
         begin
-          route.urls.each do |url|
-            if env["REQUEST_PATH"] =~ /^#{url}\/?$/ 
-              request = route.new
-	      request.instance_variable_set(:@env, env)
-	      request.instance_variable_set(:@input, @request.params)
+          match = route.urls.map { |url| [url,$~.captures] if env["REQUEST_PATH"] =~ /^#{url}\/?$/ }.compact
+          next if match.empty?
 
-              if env["HTTP_AUTHORIZATION"] || env["REQUEST_PATH"][0,8] == "/control"
-		request.extend(ParkPlace::S3)
-                meta,amz,user,state = authenticate_user(@request)
-		return redirect("ParkPlace::Controllers::CLogin") if user.nil? && env["REQUEST_PATH"] != "/control/login"
-                request.instance_variable_set(:@user, user)
-		request.instance_variable_set(:@state, state)
-                request.instance_variable_set(:@meta, meta)
-                request.instance_variable_set(:@amz, amz)
-              end
+          request = route.new(@request)
+          status, headers, body = request.send(*([call] + $~.captures)) if request.respond_to? call
+          break if status < 400
 
-              call = (env["REQUEST_METHOD"] || "GET").downcase
-              status, headers, body = request.send(*([call] + $~.captures)) if request.respond_to? call
-	      state = request.instance_eval { @state }
-	      cookie_data = Base64.encode64(Marshal.dump(state)) unless state.nil?
-	      headers['Set-Cookie'] = "parkplace=" if state && state.user_id.nil?
-            end
-          end
+        rescue ParkPlace::Redirect => e
+          status = 301
+          headers = e.headers
+          break
         rescue ParkPlace::ServiceError => e
           code = e.code
           status = e.status
@@ -179,8 +168,6 @@ module ParkPlace
       end
 
       unless env["HTTP_AUTHORIZATION"] && status >= 400 && code
-	headers["Set-Cookie"] = "parkplace=" + escape("#{OpenSSL::HMAC.hexdigest(OpenSSL::Digest::SHA1.new,
-	  options.secret, cookie_data)}--#{cookie_data}") unless cookie_data.nil?
 	[status, headers, body]
       else
         xml status do |x|
@@ -196,45 +183,10 @@ module ParkPlace
 
     def self.redirect(c, *url)
       ParkPlace::Controllers.r.each do |route|
-        return [301, { 'Location' => (url.empty? ? route.urls.first : route.urls.find{|x|x.scan(/\(.+?\)/).size==url.size}.dup.gsub!(
-	  /\(.+?\)/) { |m| url.pop }) }, []] if route.to_s == c.to_s
+        headers = yield if block_given?
+        raise ParkPlace::Redirect.new(url.empty? ? route.urls.first : route.urls.find{|x|x.scan(/\(.+?\)/).size==url.size}.dup.gsub!(
+          /\(.+?\)/) { |m| url.pop }, headers || {}) if route.to_s == c.to_s
       end
-    end
-
-    def self.authenticate_user(request)
-      env = request.env
-      meta, amz = {}, {}
-      env.each do |k,v|
-        k = k.downcase.gsub('_', '-')
-        amz[$1] = v.strip if k =~ /^http-x-amz-([-\w]+)$/
-        meta[$1] = v if k =~ /^http-x-amz-meta-([-\w]+)$/
-      end
-      if request.cookies["parkplace"]
-	checkdata,data = request.cookies["parkplace"].split("--")
-        if OpenSSL::HMAC.hexdigest(OpenSSL::Digest::SHA1.new, options.secret, data) == checkdata
-	  data = Marshal.load(Base64.decode64(data))
-	  return [meta,amz,Models::User.find_by_id(data.user_id),data]
-	end
-      end
-
-      auth, key_s, secret_s = *env['HTTP_AUTHORIZATION'].to_s.match(/^AWS (\w+):(.+)$/)
-      date_s = env['HTTP_X_AMZ_DATE'] || env['HTTP_DATE']
-      if request.params.has_key?('Signature') and Time.at(request['Expires'].to_i) >= Time.now
-        key_s, secret_s, date_s = request['AWSAccessKeyId'], request['Signature'], request['Expires']
-      end
-      uri = env['PATH_INFO']
-      uri += "?" + env['QUERY_STRING'] if ParkPlace::RESOURCE_TYPES.include?(env['QUERY_STRING'])
-      canonical = [env['REQUEST_METHOD'], env['HTTP_CONTENT_MD5'], env['HTTP_CONTENT_TYPE'],
-        date_s, uri]
-      amz.sort.each do |k, v|
-        canonical[-1,0] = "x-amz-#{k}:#{v}"
-      end
-      user = ParkPlace::Models::User.find_by_key key_s
-
-      if (user and secret_s != hmac_sha1(user.secret, canonical.map{|v|v.to_s.strip} * "\n")) || (user and user.deleted == 1)
-        raise BadAuthentication
-      end
-      [meta,amz,user]
     end
 
     def self.daemonize

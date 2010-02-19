@@ -1,19 +1,5 @@
 module ParkPlace::Controllers
 
-  @r = []
-  class << self
-    def r
-      @r
-    end
-    def S3 *u
-      r=@r
-      Class.new {
-        meta_def(:urls){u}
-        meta_def(:inherited){|x|r<<x}
-      }
-    end
-  end
-
   class RService < S3 '/'
     def get
       only_authorized

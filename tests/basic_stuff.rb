@@ -1,5 +1,6 @@
 require 'rubygems'
 require 'aws/s3'
+require 'benchmark'
 
 bucket_name = 'test_buck'
 test_file = 'test.jpg'
@@ -10,6 +11,10 @@ AWS::S3::Base.establish_connection!(
   :server => 'localhost',
   :port => 3002
 )
+
+Benchmark.bm do |b|
+b.report("") do
+100.times {
 begin
   bucket = AWS::S3::Bucket.find bucket_name
 rescue AWS::S3::NoSuchBucket
@@ -47,4 +52,8 @@ begin
   AWS::S3::S3Object.find 'renamed_file.jpg', bucket_name
 rescue AWS::S3::NoSuchKey
   puts "success"
+end
+
+}
+end
 end

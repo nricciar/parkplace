@@ -3,7 +3,76 @@ require 'markaby'
 module ParkPlace::Views
 end
 
+module ParkPlace::Controllers
+
+  @r = []
+  class << self
+    def r
+      @r
+    end
+    def S3 *u
+      r=@r
+      c = Class.new {
+        meta_def(:urls){u}
+        meta_def(:inherited){|x|r<<x}
+        class_def(:initialize) { |request|
+          @request = request
+          @env = @request.env
+          @input = @request.params
+
+          @meta, @amz = {}, {}
+          @env.each do |k,v|
+            k = k.downcase.gsub('_', '-')
+            @amz[$1] = v.strip if k =~ /^http-x-amz-([-\w]+)$/
+            @meta[$1] = v if k =~ /^http-x-amz-meta-([-\w]+)$/
+          end
+
+          if @request.cookies["parkplace"]
+            checkdata,data = @request.cookies["parkplace"].split("--")
+            if OpenSSL::HMAC.hexdigest(OpenSSL::Digest::SHA1.new, ParkPlace::Base.options.secret, data) == checkdata
+              @state = Marshal.load(Base64.decode64(data))
+            end
+          end
+          @state ||= Models::Session.new
+
+          auth, key_s, secret_s = *@env['HTTP_AUTHORIZATION'].to_s.match(/^AWS (\w+):(.+)$/)
+          date_s = @env['HTTP_X_AMZ_DATE'] || @env['HTTP_DATE']
+          if @request.params.has_key?('Signature') and Time.at(request['Expires'].to_i) >= Time.now
+            key_s, secret_s, date_s = @request['AWSAccessKeyId'], @request['Signature'], @request['Expires']
+          end
+          uri = @env['PATH_INFO']
+          uri += "?" + @env['QUERY_STRING'] if ParkPlace::RESOURCE_TYPES.include?(@env['QUERY_STRING'])
+          canonical = [@env['REQUEST_METHOD'], @env['HTTP_CONTENT_MD5'], @env['HTTP_CONTENT_TYPE'],
+            date_s, uri]
+          @amz.sort.each do |k, v|
+            canonical[-1,0] = "x-amz-#{k}:#{v}"
+          end
+          @user = ParkPlace::Models::User.find_by_key key_s
+
+          if (@user and secret_s != hmac_sha1(@user.secret, canonical.map{|v|v.to_s.strip} * "\n")) || (@user and @user.deleted == 1)
+            raise BadAuthentication
+          end
+        }
+      }
+    end
+    alias R S3
+  end
+
+end
+
 module ParkPlace::UserSession
+
+  def initialize(request)
+    super(request)
+    if @state.user_id
+      @user = ParkPlace::Models::User.find @state.user_id
+    end
+    return ParkPlace::Base.redirect Controllers::CLogin if @user.nil?
+  end
+
+end
+
+module ParkPlace::Control
 
   class Mab < Markaby::Builder
     include ParkPlace::Views
@@ -19,18 +88,10 @@ module ParkPlace::UserSession
   def method_missing(*a,&b)
     a.shift if a[0]==:render
     m=Mab.new({},self)
-    s=m.capture{instance_variable_set(:@state, state)}
+#    s=m.capture{instance_variable_set(:@state, state)}
     s=m.capture{send(*a,&b)}
     s=m.capture{send(:layout){s}} if /^_/!~a[0].to_s and m.respond_to?:layout
     s
-  end
-
-  def state
-    @state ||= Models::Session.new
-  end
-
-  def state=(val)
-    @state = val
   end
 
 end
@@ -58,6 +119,7 @@ class Time
 end
 
 module ParkPlace
+
   # For controllers which pass back XML directly, this method allows quick assignment
   # of the status code and takes care of generating the XML headers.  Takes a block
   # which receives the Builder::XmlMarkup object.

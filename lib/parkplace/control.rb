@@ -2,17 +2,11 @@ require 'parkplace/mimetypes_hash'
 
 class Class
   def login_required
-    include ParkPlace::UserSession
+    include ParkPlace::UserSession, ParkPlace::Control
   end
 end
 
 module ParkPlace::Controllers
-
-  class << self
-    def R *u
-      S3 *u
-    end
-  end
 
   class CHome < R '/control'
     login_required
@@ -22,7 +16,7 @@ module ParkPlace::Controllers
   end
 
   class CLogin < R '/control/login'
-    include ParkPlace::UserSession
+    include ParkPlace::Control
     def get
       [200, {}, render(:control, "Login", :login)]
     end
@@ -31,13 +25,17 @@ module ParkPlace::Controllers
       @user = Models::User.find_by_login @input['login']
       if @user
 	if @user.password == hmac_sha1( @input['password'], @user.secret )
-	  state.user_id = @user.id
-	  return ParkPlace::Base.redirect(CBuckets)
+	  @state.user_id = @user.id
+	  ParkPlace::Base.redirect(CBuckets) {
+            cookie_data = Base64.encode64(Marshal.dump(@state))
+            { 'Set-Cookie' => "parkplace=" + ParkPlace::Base.escape("#{OpenSSL::HMAC.hexdigest(OpenSSL::Digest::SHA1.new,
+              ParkPlace::Base.options.secret, cookie_data)}--#{cookie_data}") }
+          }
 	else
 	  @user.errors.add(:password, 'is incorrect')
 	end
       else
-	@user = User.new
+	@user = Models::User.new
 	@user.errors.add(:login, 'not found')
       end
       [200, {}, render(:control, "Login", :login)]
@@ -47,8 +45,8 @@ module ParkPlace::Controllers
   class CLogout < R '/control/logout'
     login_required
     def get
-      state.user_id = nil
-      ParkPlace::Base.redirect CHome
+      @state.user_id = nil
+      ParkPlace::Base.redirect(CHome) { {  'Set-Cookie' => "parkplace=;expires=#{1.hour.ago.httpdate}" } }
     end
   end
 
