@@ -42,13 +42,29 @@ module ParkPlace
       raise PreconditionFailed if @env['HTTP_IF_MATCH'] and etag != @env['HTTP_IF_MATCH']
       raise NotModified if @env['HTTP_IF_NONE_MATCH'] and etag == @env['HTTP_IF_NONE_MATCH']
 
-      @slot.meta.each { |k, v| headers["x-amz-meta-#{k}"] = v } unless @slot.meta.nil?
+      @slot.meta.each { |k, v| 
+	case k.downcase
+	when "expires"
+	  # expire by access
+	  expire_time = (Time.now + $1.to_i.seconds).httpdate if v =~ /^A([0-9]+)$/
+	  # expire by modification
+	  expire_time = (@slot.updated_at + $1.to_i.seconds).httpdate if v =~ /^M([0-9]+)$/
+	  # expire by value
+	  expire_time ||= v
+	  headers["Expires"] = expire_time
+	when "cache-control"
+	  headers["Cache-Control"] = v
+	else
+	  headers["x-amz-meta-#{k}"] = v 
+	end
+      } unless @slot.meta.nil?
 
-        if @slot.obj.is_a? ParkPlace::Models::FileInfo
-          headers['Content-Type'] = @slot.obj.mime_type
-          headers['Content-Disposition'] = @slot.obj.disposition
-          headers['Content-Length'] = (@revision_file.nil? ? @slot.obj.size : @revision_file.length).to_s
-        end
+      if @slot.obj.is_a? ParkPlace::Models::FileInfo
+        headers['Content-Type'] = @slot.obj.mime_type
+        headers['Content-Disposition'] = @slot.obj.disposition
+        headers['Content-Length'] = (@revision_file.nil? ? @slot.obj.size : @revision_file.length).to_s
+      end
+
       headers['Content-Type'] ||= 'binary/octet-stream'
       headers.merge!('ETag' => etag, 'Last-Modified' => @slot.updated_at.httpdate) if @revision_file.nil?
 

@@ -173,7 +173,11 @@ module ParkPlace::Controllers
 
       raise MissingContentLength unless @env['HTTP_CONTENT_LENGTH']
 
-      if @env['HTTP_X_AMZ_COPY_SOURCE'].to_s =~ /\/(.+?)\/(.+)/
+      if @input.has_key? 'acl'
+        slot = bucket.find_slot(oid)
+        slot.grant(requested_acl(slot))
+	return [200, { 'ETag' => slot.etag, 'Content-Length' => 0.to_s }, []]
+      elsif @env['HTTP_X_AMZ_COPY_SOURCE'].to_s =~ /\/(.+?)\/(.+)/
         source_bucket_name = $1
         source_oid = $2
 

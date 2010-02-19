@@ -164,7 +164,7 @@ module ParkPlace
         end
       end
                    
-      # mongrel gets upset over headers with nil values
+      # Mongrel gets upset over headers with nil values
       headers.delete_if { |x,y| y.nil? }
 
       if !options.use_x_sendfile && headers.include?('X-Sendfile') && File.exists?(headers['X-Sendfile'])
@@ -172,6 +172,8 @@ module ParkPlace
       end
 
       unless env["HTTP_AUTHORIZATION"] && status >= 400 && code
+	# Set our content type if the response left it out
+	headers['Content-Type'] ||= 'text/html'
 	[status, headers, body]
       else
         xml status do |x|
