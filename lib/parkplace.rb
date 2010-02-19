@@ -120,6 +120,7 @@ module ParkPlace
           abort "!! Please check out http://code.whytheluckystiff.net/camping/wiki/BeAlertWhenOnSqlite3 for tips."
         end
       end
+      options.database[:pool] = 10
       ParkPlace::STORAGE_PATH.replace options.storage_dir
       ActiveRecord::Base.establish_connection(options.database)
       ActiveRecord::Base.logger = Logger.new('debug.log') if $DEBUG
@@ -129,10 +130,6 @@ module ParkPlace
     def self.escape(s); s.to_s.gsub(/[^ \w.-]+/n){'%'+($&.unpack('H2'*$&.size)*'%').upcase}.tr(' ', '+') end
 
     def self.call(env)
-      # apparently if we do not call this we will run out
-      # of database connections
-      ActiveRecord::Base.verify_active_connections!
-
       env["PATH_INFO"] ||= ""
       env["SCRIPT_NAME"] ||= ""
       env["HTTP_CONTENT_LENGTH"] ||= env["CONTENT_LENGTH"]
@@ -152,11 +149,9 @@ module ParkPlace
         begin
           match = route.urls.map { |url| [url,$~.captures] if env["REQUEST_PATH"] =~ /^#{url}\/?$/ }.compact
           next if match.empty?
-
           request = route.new(@request)
           status, headers, body = request.send(*([call] + $~.captures)) if request.respond_to? call
           break if status < 400
-
         rescue ParkPlace::Redirect => e
           status = 301
           headers = e.headers
@@ -168,7 +163,7 @@ module ParkPlace
           break unless e.status == 404
         end
       end
-
+                   
       # mongrel gets upset over headers with nil values
       headers.delete_if { |x,y| y.nil? }
 
@@ -188,6 +183,8 @@ module ParkPlace
           end
         end
       end
+    ensure
+      ActiveRecord::Base.clear_active_connections!
     end
 
     def self.redirect(c, *url)
