@@ -54,6 +54,7 @@ module ParkPlace
 	  headers["Expires"] = expire_time
 	when "cache-control"
 	  headers["Cache-Control"] = v
+        when "origin"
 	else
 	  headers["x-amz-meta-#{k}"] = v 
 	end

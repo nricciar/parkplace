@@ -14,13 +14,13 @@ class BackupManager
     head = { 'Content-Type' => 'text/html' }
     slave_host = env['HTTP_X_FORWARDED_FOR'].nil? ? env['REMOTE_ADDR'] : env['HTTP_X_FORWARDED_FOR']
     if env["HTTP_AUTHORIZATION"].nil?
-      puts "[#{Time.now}] Unauthorized access to /backup from #{slave_host}" if ParkPlace.options.verbose
+      puts "[#{Time.now}] Unauthorized access to /backup from #{slave_host}" if ParkPlace::Base.options.verbose
       return [401, head, "Access Denied"]
     else
       username,key = env["HTTP_AUTHORIZATION"].split(":")
       user = Models::User.find_by_sql [%{ SELECT * FROM parkplace_users WHERE login = ?}, username ]
       if user.empty? || !user.first.superuser? || MD5.md5("#{user.first.secret}:#{env['REQUEST_URI']}:#{env['HTTP_IF_MODIFIED_SINCE']}").hexdigest != key
-        puts "[#{Time.now}] Failed authentication for user #{username} from #{slave_host}" if ParkPlace.options.verbose
+        puts "[#{Time.now}] Failed authentication for user #{username} from #{slave_host}" if ParkPlace::Base.options.verbose
         return [401, head, "Access Denied"]
       end
     end
@@ -52,14 +52,14 @@ class BackupManager
           sc += 1
         end
         if Models::Bit.last_time_updated > env["HTTP_IF_MODIFIED_SINCE"].to_i
-          puts "[#{Time.now}] Pushing new updates to #{slave_host}" if ParkPlace.options.verbose
+          puts "[#{Time.now}] Pushing new updates to #{slave_host}" if ParkPlace::Base.options.verbose
           @@known_hosts[slave_host.to_s][:status] = "out of sync"
           conditions = [ 'updated_at > ?', Time.at(env["HTTP_IF_MODIFIED_SINCE"].to_i) ]
           @bits = Models::Bit.find(:all, :conditions => conditions, :order => "updated_at ASC", :limit => 25, :include => :bits_users)
           @bits += Models::User.find(:all, :conditions => conditions, :order => "updated_at ASC", :limit => 25)
         end
       else
-        puts "[#{Time.now}] Initial slave update for #{slave_host}" if ParkPlace.options.verbose
+        puts "[#{Time.now}] Initial slave update for #{slave_host}" if ParkPlace::Base.options.verbose
         @bits = Models::Bit.find(:all, :order => "updated_at ASC", :limit => 25, :include => :bits_users)
         @bits += Models::User.find(:all, :order => "updated_at ASC", :limit => 25)
       end
@@ -69,7 +69,7 @@ class BackupManager
         @bits.sort! { |x,y| x.updated_at <=> y.updated_at }
         head['Last-Modified'] = @bits.last.updated_at.to_i.to_s
       end
-      puts "[#{Time.now}] #{slave_host} requested resource #{env["REQUEST_URI"]}" if ParkPlace.options.verbose
+      puts "[#{Time.now}] #{slave_host} requested resource #{env["REQUEST_URI"]}" if ParkPlace::Base.options.verbose
       [200, head, Marshal.dump(@bits)]
     end
   end

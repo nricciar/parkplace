@@ -207,7 +207,7 @@ set_table_name "parkplace_bits"
         self.save()
         self.git_update
       rescue Git::GitExecuteError => error_message
-        puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
+        puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace::Base.options.verbose
       end
     end
 
@@ -260,13 +260,13 @@ set_table_name "parkplace_bits"
           end
         end
       rescue TimeoutError
-        puts "[#{Time.now}] check_origin: Timed Out. Using latest copy" if ParkPlace.options.verbose
+        puts "[#{Time.now}] check_origin: Timed Out. Using latest copy" if ParkPlace::Base.options.verbose
       rescue => err
-        puts "[#{Time.now}] check_origin: #{err}. Using latest copy" if ParkPlace.options.verbose
+        puts "[#{Time.now}] check_origin: #{err}. Using latest copy" if ParkPlace::Base.options.verbose
       end
 
       if file_changed
-        puts "[#{Time.now}] check_origin: New content from origin.  Updating local copy." if ParkPlace.options.verbose
+        puts "[#{Time.now}] check_origin: New content from origin.  Updating local copy." if ParkPlace::Base.options.verbose
         info = self.obj
         info.size = readlen
         info.md5 = Base64.encode64(md5.digest).strip
@@ -280,7 +280,7 @@ set_table_name "parkplace_bits"
             tmp = self.git_repository.commit("Added #{self.name} to the Git repository.")
             self.git_update
           rescue Git::GitExecuteError => error_message
-            puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace.options.verbose
+            puts "[#{Time.now}] GIT: #{error_message}" if ParkPlace::Base.options.verbose
           end
         end
       end

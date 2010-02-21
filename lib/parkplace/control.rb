@@ -157,7 +157,7 @@ module ParkPlace::Controllers
 	  slot.git_repository.commit("Added #{slot.name} to the Git repository.")
 	  slot.git_update
 	rescue => err
-	  puts "[#{Time.now}] GIT: #{err}" if ParkPlace.options.verbose
+	  puts "[#{Time.now}] GIT: #{err}" if ParkPlace::Base.options.verbose
 	end
       end
 

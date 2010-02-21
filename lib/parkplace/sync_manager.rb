@@ -77,10 +77,10 @@ module ParkPlace
             get_file("/backup/#{dl[:id]}",nil,file_path) do |data|
               open(file_path,"wb") { |f| f.write(data) } unless data.nil?
             end
-            puts "[#{Time.now}] File #{file_path} downloaded." if ParkPlace.options.verbose
+            puts "[#{Time.now}] File #{file_path} downloaded." if ParkPlace::Base.options.verbose
           }
         else
-          puts "[#{Time.now}] File exists, but checksum does not match. Downloading again..." if ParkPlace.options.verbose && dl == :corrupt
+          puts "[#{Time.now}] File exists, but checksum does not match. Downloading again..." if ParkPlace::Base.options.verbose && dl == :corrupt
         end
       end
       @download_list = {}
@@ -98,7 +98,7 @@ module ParkPlace
             # get the new versioned data
             FileUtils.remove_entry_secure(bucket.git_repository_path,true)
           end
-          Git.clone("http://#{self.server}:#{self.port}/#{bucket.name}.git", bucket.name, { :path => ParkPlace.options.storage_dir })
+          Git.clone("http://#{self.server}:#{self.port}/#{bucket.name}.git", bucket.name, { :path => ParkPlace::Base.options.storage_dir })
           bucket.git_repository.config
           return true
         else
@@ -152,7 +152,7 @@ module ParkPlace
                   old_file_path = File.join(STORAGE_PATH, tmp.obj.path)
                   File.move(old_file_path,file_path) if File.exists?(old_file_path) && r.attributes['obj'].path != tmp.obj.path
                 elsif !old_file_path.nil? && !File.exists?(File.join(File.dirname(old_file_path),'.git'))
-                  puts "[#{Time.now}] File has changed removing stale files" if ParkPlace.options.verbose
+                  puts "[#{Time.now}] File has changed removing stale files" if ParkPlace::Base.options.verbose
                   old_file_path = File.join(STORAGE_PATH, tmp.obj.path)
                   File.unlink(old_file_path) if File.exists?(old_file_path)
                 end
@@ -162,7 +162,7 @@ module ParkPlace
               file_path = File.join(STORAGE_PATH, tmp.obj.path)
               if File.exists?(file_path)
                 File.unlink(file_path)
-                puts "[#{Time.now}] Removed deleted file #{file_path}" if ParkPlace.options.verbose
+                puts "[#{Time.now}] Removed deleted file #{file_path}" if ParkPlace::Base.options.verbose
               end
             end
             tmp.obj = r.attributes['obj']
@@ -196,7 +196,7 @@ module ParkPlace
               false
             end
           end
-          puts "[#{Time.now}] " + (tmp.deleted == 1 ? "Deleted" : (tmp.new_record? ? "Created" : "Updated")) + " #{tmp.class}/#{tmp.id}" if ParkPlace.options.verbose
+          puts "[#{Time.now}] " + (tmp.deleted == 1 ? "Deleted" : (tmp.new_record? ? "Created" : "Updated")) + " #{tmp.class}/#{tmp.id}" if ParkPlace::Base.options.verbose
           tmp.save(false)
           class << tmp
             def record_timestamps
