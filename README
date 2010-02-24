@@ -31,7 +31,7 @@
     mongrel_upload_progress for nice ajax upload status for large files
 
     Caching
-    memcached - response cache
+    memcache - response cache
 
 == Quick Start
 
