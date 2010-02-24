@@ -27,3 +27,18 @@ begin
 rescue LoadError
   puts "-- No RubyTorrent found, torrent support disbled."
 end
+begin
+  require 'memcache'
+  memcache_options = {
+    :c_threshold => 10_000,
+    :compression => true,
+    :debug => false,
+    :namespace => 'parkplace',
+    :readonly => false,
+    :urlencode => false
+  }
+  CACHE = MemCache.new memcache_options
+  puts "-- MemCache found, request cache enabled"
+rescue LoadError
+  puts "-- No MemCache found, no request cache"
+end

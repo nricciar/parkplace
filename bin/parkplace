@@ -28,6 +28,10 @@ opts = OptionParser.new do |opts|
         options.rack_config = ru
     end
 
+    opts.on("-m", "--memcache SERVER", "response cache") do |m|
+        CACHE.servers = m
+    end
+
     opts.on("-d", "--directory DIRECTORY",
             "Park Place directory (defaults to #{options.parkplace_dir || 'None'})") do |d|
         options.parkplace_dir = d

@@ -15,6 +15,7 @@ module ParkPlace::Controllers
       c = Class.new {
         meta_def(:urls){u}
         meta_def(:inherited){|x|r<<x}
+        class_def(:can_cache) { @request.request_method == 'GET' && @user.nil? ? true : false }
         class_def(:initialize) { |request|
           @request = request
           @env = @request.env

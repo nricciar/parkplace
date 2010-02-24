@@ -129,6 +129,17 @@ module ParkPlace
 
     def self.escape(s); s.to_s.gsub(/[^ \w.-]+/n){'%'+($&.unpack('H2'*$&.size)*'%').upcase}.tr(' ', '+') end
 
+    def self.add_cached_response(request, options = {})
+      return nil if !defined?(CACHE) || CACHE.servers.empty?
+      { :status => 200, :body => [] }.merge!(options)
+      CACHE.add "#{request.request_method}:#{request.env['REQUEST_PATH']}", options, 60
+    end
+
+    def self.get_cached_response(request)
+      return nil if !defined?(CACHE) || CACHE.servers.empty?
+      CACHE.get "#{request.request_method}:#{request.env['REQUEST_PATH']}"
+    end
+
     def self.call(env)
       env["PATH_INFO"] ||= ""
       env["SCRIPT_NAME"] ||= ""
@@ -137,33 +148,43 @@ module ParkPlace
       env["HTTP_HOST"] = env["HTTP_X_FORWARDED_HOST"] unless env["HTTP_X_FORWARDED_HOST"].nil?
 
       code = nil
+      request = nil
       status = 200
       headers = {}
       body = []
 
       @request = Rack::Request.new(env)
-      call = (env["REQUEST_METHOD"] || "GET").downcase
-      cookie_data = nil
+      cache = get_cached_response(@request)
 
-      ParkPlace::Controllers.r.each do |route|
-        begin
-          match = route.urls.map { |url| [url,$~.captures] if env["REQUEST_PATH"] =~ /^#{url}\/?$/ }.compact
-          next if match.empty?
-          request = route.new(@request)
-          status, headers, body = request.send(*([call] + $~.captures)) if request.respond_to? call
-          break if status < 400
-        rescue ParkPlace::Redirect => e
-          status = 301
-          headers = e.headers
-          break
-        rescue ParkPlace::ServiceError => e
-          code = e.code
-          status = e.status
-          body = e.message
-          break unless e.status == 404
+      unless cache.nil?
+        status = cache[:status] unless cache[:status].nil?
+        headers = cache[:headers]
+        body = cache[:body]
+      else
+        call = (env["REQUEST_METHOD"] || "GET").downcase
+        cookie_data = nil
+
+        ParkPlace::Controllers.r.each do |route|
+          begin
+            match = route.urls.map { |url| { :url => url, :args => $~.captures } if env["REQUEST_PATH"] =~ /^#{url}\/?$/ }.compact
+            next if match.empty?
+            request = route.new(@request)
+            status, headers, body = request.send(*([call] + match.first[:args])) if request.respond_to? call
+            add_cached_response(@request, { :headers => headers, :body => body }) if request.can_cache
+            break if status < 400
+          rescue ParkPlace::Redirect => e
+            status = 301
+            headers = e.headers
+            break
+          rescue ParkPlace::ServiceError => e
+            code = e.code
+            status = e.status
+            body = e.message
+            break unless e.status == 404
+          end
         end
       end
-                   
+
       # Mongrel gets upset over headers with nil values
       headers.delete_if { |x,y| y.nil? }
 
